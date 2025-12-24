@@ -1,18 +1,19 @@
 {
   "domain": "octopus_energy_es",
   "name": "Octopus Energy Spain",
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@bthos"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/yourusername/ha-octopus-energy-es",
+  "documentation": "https://github.com/bthos/ha-octopus-energy-es",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/yourusername/ha-octopus-energy-es/issues",
+  "issue_tracker": "https://github.com/bthos/ha-octopus-energy-es/issues",
   "requirements": [
     "aiohttp>=3.8.0",
     "beautifulsoup4>=4.11.0",
     "lxml>=4.9.0"
   ],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "after_dependencies": []
 }
 
