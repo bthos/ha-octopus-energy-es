@@ -9,7 +9,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CONF_ESIOS_TOKEN,
@@ -156,8 +155,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if token := user_input.get(CONF_ESIOS_TOKEN):
                 self._data[CONF_ESIOS_TOKEN] = token
+            
+            # Get tariff type for title
+            tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
+            tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
+            
             return await self.async_create_entry(
-                title=f"Octopus Energy Spain - {self._tariff_type.title()}",
+                title=f"Octopus Energy Spain - {tariff_name}",
                 data=self._data,
             )
 

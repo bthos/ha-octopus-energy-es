@@ -8,6 +8,9 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .coordinator import OctopusEnergyESCoordinator
 
+# Import config_flow to register it
+from . import config_flow  # noqa: F401
+
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
