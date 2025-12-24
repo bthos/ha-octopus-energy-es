@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "tariff_type": {
+        "title": "Select Tariff Type",
+        "description": "Choose your Octopus Energy Spain tariff type",
+        "data": {
+          "tariff_type": "Tariff Type"
+        }
+      },
+      "octopus_credentials": {
+        "title": "Octopus Energy Credentials",
+        "description": "Enter your Octopus Energy Spain account credentials",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "property_id": "Property ID"
+        }
+      },
+      "tariff_config": {
+        "title": "Tariff Configuration",
+        "description": "Configure tariff-specific parameters",
+        "data": {
+          "fixed_rate": "Fixed Rate (€/kWh)",
+          "p1_rate": "P1 Rate (€/kWh)",
+          "p2_rate": "P2 Rate (€/kWh)",
+          "p3_rate": "P3 Rate (€/kWh)",
+          "solar_surplus_rate": "Solar Surplus Compensation (€/kWh)"
+        }
+      },
+      "esios_token": {
+        "title": "ESIOS API Token (Optional)",
+        "description": "Enter your ESIOS API token for direct market data access. Leave empty to use public data.",
+        "data": {
+          "esios_token": "ESIOS API Token"
+        }
+      },
+      "options": {
+        "title": "Options",
+        "description": "Configure update intervals and preferences",
+        "data": {
+          "update_interval": "Update Interval (minutes)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Octopus Energy API",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unknown error occurred"
+    },
+    "abort": {
+      "already_configured": "Octopus Energy Spain is already configured"
+    }
+  }
+}
+

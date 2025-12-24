@@ -1,0 +1,491 @@
+"""Sensor entities for Octopus Energy Spain integration."""
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from zoneinfo import ZoneInfo
+
+from .const import (
+    ATTR_DATA,
+    ATTR_PRICE_PER_KWH,
+    ATTR_START_TIME,
+    ATTR_UNIT_OF_MEASUREMENT,
+    DOMAIN,
+    TIMEZONE_MADRID,
+)
+from .coordinator import OctopusEnergyESCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="price",
+    name="Octopus Energy ES Price",
+    native_unit_of_measurement="€/kWh",
+    state_class=SensorStateClass.MEASUREMENT,
+)
+
+CURRENT_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="current_price",
+    name="Octopus Energy ES Current Price",
+    native_unit_of_measurement="€/kWh",
+    state_class=SensorStateClass.MEASUREMENT,
+)
+
+MIN_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="min_price",
+    name="Octopus Energy ES Min Price",
+    native_unit_of_measurement="€/kWh",
+    state_class=SensorStateClass.MEASUREMENT,
+)
+
+MAX_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="max_price",
+    name="Octopus Energy ES Max Price",
+    native_unit_of_measurement="€/kWh",
+    state_class=SensorStateClass.MEASUREMENT,
+)
+
+CHEAPEST_HOUR_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="cheapest_hour",
+    name="Octopus Energy ES Cheapest Hour",
+    icon="mdi:clock-outline",
+)
+
+DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="daily_consumption",
+    name="Octopus Energy ES Daily Consumption",
+    native_unit_of_measurement="kWh",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:lightning-bolt",
+)
+
+HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="hourly_consumption",
+    name="Octopus Energy ES Hourly Consumption",
+    native_unit_of_measurement="kWh",
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:lightning-bolt",
+)
+
+MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="monthly_consumption",
+    name="Octopus Energy ES Monthly Consumption",
+    native_unit_of_measurement="kWh",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:lightning-bolt",
+)
+
+DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="daily_cost",
+    name="Octopus Energy ES Daily Cost",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
+CURRENT_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="current_bill",
+    name="Octopus Energy ES Current Bill",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:receipt",
+)
+
+MONTHLY_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="monthly_bill",
+    name="Octopus Energy ES Monthly Bill",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:receipt",
+)
+
+LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="last_invoice",
+    name="Octopus Energy ES Last Invoice",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:receipt",
+)
+
+BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="billing_period",
+    name="Octopus Energy ES Billing Period",
+    icon="mdi:calendar-range",
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Octopus Energy Spain sensors."""
+    coordinator: OctopusEnergyESCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    entities: list[SensorEntity] = [
+        OctopusEnergyESPriceSensor(coordinator, PRICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESCurrentPriceSensor(coordinator, CURRENT_PRICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESMinPriceSensor(coordinator, MIN_PRICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESMaxPriceSensor(coordinator, MAX_PRICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESCheapestHourSensor(coordinator, CHEAPEST_HOUR_SENSOR_DESCRIPTION),
+        OctopusEnergyESDailyConsumptionSensor(
+            coordinator, DAILY_CONSUMPTION_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESHourlyConsumptionSensor(
+            coordinator, HOURLY_CONSUMPTION_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESMonthlyConsumptionSensor(
+            coordinator, MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
+        OctopusEnergyESCurrentBillSensor(coordinator, CURRENT_BILL_SENSOR_DESCRIPTION),
+        OctopusEnergyESMonthlyBillSensor(coordinator, MONTHLY_BILL_SENSOR_DESCRIPTION),
+        OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
+    ]
+
+    async_add_entities(entities)
+
+
+class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
+    """Base sensor for Octopus Energy Spain."""
+
+    def __init__(
+        self,
+        coordinator: OctopusEnergyESCoordinator,
+        description: SensorEntityDescription,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
+            "name": "Octopus Energy Spain",
+            "manufacturer": "Octopus Energy",
+            "model": coordinator._entry.data.get("tariff_type", "Unknown"),
+        }
+
+
+class OctopusEnergyESPriceSensor(OctopusEnergyESSensor):
+    """Main price sensor with data array for price-timeline-card."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the average price for current day."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        if not prices:
+            return None
+
+        total = sum(price["price_per_kwh"] for price in prices)
+        return round(total / len(prices), 6)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        # Format data for price-timeline-card compatibility
+        price_data = [
+            {
+                ATTR_START_TIME: price["start_time"],
+                ATTR_PRICE_PER_KWH: price["price_per_kwh"],
+            }
+            for price in prices
+        ]
+
+        return {
+            ATTR_DATA: price_data,
+            ATTR_UNIT_OF_MEASUREMENT: "€/kWh",
+        }
+
+
+class OctopusEnergyESCurrentPriceSensor(OctopusEnergyESSensor):
+    """Current price sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current price."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        if not prices:
+            return None
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+
+        # Find price for current hour
+        for price in prices:
+            price_time = datetime.fromisoformat(price["start_time"])
+            if price_time.replace(tzinfo=None) == current_hour.replace(tzinfo=None):
+                return price["price_per_kwh"]
+
+        return None
+
+
+class OctopusEnergyESMinPriceSensor(OctopusEnergyESSensor):
+    """Minimum price sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the minimum price."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        if not prices:
+            return None
+
+        return min(price["price_per_kwh"] for price in prices)
+
+
+class OctopusEnergyESMaxPriceSensor(OctopusEnergyESSensor):
+    """Maximum price sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the maximum price."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        if not prices:
+            return None
+
+        return max(price["price_per_kwh"] for price in prices)
+
+
+class OctopusEnergyESCheapestHourSensor(OctopusEnergyESSensor):
+    """Cheapest hour sensor."""
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the cheapest hour."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+
+        if not prices:
+            return None
+
+        cheapest = min(prices, key=lambda x: x["price_per_kwh"])
+        dt = datetime.fromisoformat(cheapest["start_time"])
+        return dt.strftime("%H:00")
+
+
+class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
+    """Daily consumption sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return daily consumption."""
+        data = self.coordinator.data
+        consumption = data.get("consumption", [])
+
+        if not consumption:
+            return None
+
+        # Sum consumption for today
+        today = datetime.now(ZoneInfo(TIMEZONE_MADRID)).date()
+        total = 0.0
+
+        for item in consumption:
+            # Parse consumption item (format may vary)
+            if isinstance(item, dict):
+                item_date_str = item.get("date") or item.get("start_time")
+                if item_date_str:
+                    try:
+                        item_date = datetime.fromisoformat(item_date_str).date()
+                        if item_date == today:
+                            total += float(item.get("consumption", item.get("value", 0)))
+                    except (ValueError, TypeError):
+                        continue
+
+        return round(total, 3) if total > 0 else None
+
+
+class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
+    """Hourly consumption sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current hour consumption."""
+        data = self.coordinator.data
+        consumption = data.get("consumption", [])
+
+        if not consumption:
+            return None
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("datetime")
+                if item_time_str:
+                    try:
+                        item_time = datetime.fromisoformat(item_time_str)
+                        if item_time.replace(minute=0, second=0, microsecond=0) == current_hour:
+                            return float(item.get("consumption", item.get("value", 0)))
+                    except (ValueError, TypeError):
+                        continue
+
+        return None
+
+
+class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
+    """Monthly consumption sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return monthly consumption."""
+        data = self.coordinator.data
+        consumption = data.get("consumption", [])
+
+        if not consumption:
+            return None
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_month = now.month
+        current_year = now.year
+
+        total = 0.0
+
+        for item in consumption:
+            if isinstance(item, dict):
+                item_date_str = item.get("date") or item.get("start_time")
+                if item_date_str:
+                    try:
+                        item_date = datetime.fromisoformat(item_date_str)
+                        if item_date.month == current_month and item_date.year == current_year:
+                            total += float(item.get("consumption", item.get("value", 0)))
+                    except (ValueError, TypeError):
+                        continue
+
+        return round(total, 3) if total > 0 else None
+
+
+class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
+    """Daily cost sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return daily cost."""
+        data = self.coordinator.data
+        prices = data.get("today_prices", [])
+        consumption = data.get("consumption", [])
+
+        if not prices or not consumption:
+            return None
+
+        today = datetime.now(ZoneInfo(TIMEZONE_MADRID)).date()
+        total_cost = 0.0
+
+        # Match consumption with prices
+        for item in consumption:
+            if isinstance(item, dict):
+                item_date_str = item.get("date") or item.get("start_time")
+                if item_date_str:
+                    try:
+                        item_date = datetime.fromisoformat(item_date_str).date()
+                        if item_date == today:
+                            item_time = datetime.fromisoformat(item_date_str)
+                            hour = item_time.hour
+
+                            # Find matching price
+                            for price in prices:
+                                price_time = datetime.fromisoformat(price["start_time"])
+                                if price_time.hour == hour:
+                                    consumption_value = float(
+                                        item.get("consumption", item.get("value", 0))
+                                    )
+                                    total_cost += consumption_value * price["price_per_kwh"]
+                                    break
+                    except (ValueError, TypeError):
+                        continue
+
+        return round(total_cost, 2) if total_cost > 0 else None
+
+
+class OctopusEnergyESCurrentBillSensor(OctopusEnergyESSensor):
+    """Current bill sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current bill amount."""
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+
+        if not billing:
+            return None
+
+        # Extract current bill from billing data
+        return billing.get("current_bill") or billing.get("amount")
+
+
+class OctopusEnergyESMonthlyBillSensor(OctopusEnergyESSensor):
+    """Monthly bill sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return monthly bill amount."""
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+
+        if not billing:
+            return None
+
+        return billing.get("monthly_bill") or billing.get("month_amount")
+
+
+class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
+    """Last invoice sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return last invoice amount."""
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+
+        if not billing:
+            return None
+
+        invoices = billing.get("invoices", [])
+        if invoices and len(invoices) > 0:
+            return invoices[0].get("amount")
+
+        return billing.get("last_invoice")
+
+
+class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
+    """Billing period sensor."""
+
+    @property
+    def native_value(self) -> str | None:
+        """Return billing period."""
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+
+        if not billing:
+            return None
+
+        start_date = billing.get("period_start")
+        end_date = billing.get("period_end")
+
+        if start_date and end_date:
+            return f"{start_date} - {end_date}"
+
+        return None
+
