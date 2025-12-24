@@ -160,7 +160,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
             tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
             
-            return await self.async_create_entry(
+            return self.async_create_entry(
                 title=f"Octopus Energy Spain - {tariff_name}",
                 data=self._data,
             )
