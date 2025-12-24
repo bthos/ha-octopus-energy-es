@@ -44,9 +44,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to Octopus Energy API",
-      "invalid_auth": "Invalid authentication credentials",
-      "unknown": "Unknown error occurred"
+      "cannot_connect": "Unable to connect to Octopus Energy API. Please check your internet connection and try again.",
+      "invalid_auth": "Invalid authentication credentials. Please check your email, password, and property ID.",
+      "unknown": "Unknown error occurred. Please check the logs for details."
     },
     "abort": {
       "already_configured": "Octopus Energy Spain is already configured"

@@ -184,10 +184,15 @@ class OctopusEnergyESPriceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return the average price for current day."""
+        if not self.coordinator.data:
+            _LOGGER.debug("Coordinator data is None or empty")
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
 
         if not prices:
+            _LOGGER.debug("No price data in coordinator")
             return None
 
         total = sum(price["price_per_kwh"] for price in prices)

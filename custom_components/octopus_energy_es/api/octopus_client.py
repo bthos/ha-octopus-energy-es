@@ -60,17 +60,23 @@ class OctopusClient:
             ) as response:
                 if response.status == 401:
                     raise OctopusClientError("Invalid Octopus Energy credentials")
+                if response.status == 404:
+                    raise OctopusClientError("Octopus Energy API endpoint not found. API may have changed.")
                 response.raise_for_status()
 
                 data = await response.json()
-                self._auth_token = data.get("token") or data.get("access_token")
+                _LOGGER.debug("Octopus API auth response: %s", data)
+                
+                self._auth_token = data.get("token") or data.get("access_token") or data.get("accessToken")
 
                 if not self._auth_token:
+                    _LOGGER.error("No auth token in response: %s", data)
                     raise OctopusClientError("No auth token received from API")
 
                 return self._auth_token
 
         except aiohttp.ClientError as err:
+            _LOGGER.error("Network error authenticating: %s", err)
             raise OctopusClientError(f"Error authenticating: {err}") from err
 
     async def _get_headers(self) -> dict[str, str]:

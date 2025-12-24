@@ -80,10 +80,49 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            self._data.update(user_input)
-            # Validate credentials by attempting to connect
-            # For now, we'll just store them
-            return await self.async_step_tariff_config()
+            # Validate credentials by attempting to authenticate
+            try:
+                from .api.octopus_client import OctopusClient, OctopusClientError
+                
+                email = user_input[CONF_EMAIL]
+                password = user_input[CONF_PASSWORD]
+                property_id = user_input[CONF_PROPERTY_ID]
+                
+                # Try to authenticate
+                test_client = OctopusClient(email, password, property_id)
+                await test_client._authenticate()
+                await test_client.close()
+                
+                # Credentials are valid, store them
+                self._data.update(user_input)
+                return await self.async_step_tariff_config()
+                
+            except OctopusClientError as err:
+                _LOGGER.error("Error validating credentials: %s", err)
+                error_msg = str(err).lower()
+                if "401" in error_msg or "invalid" in error_msg:
+                    errors["base"] = "invalid_auth"
+                elif "cannot_connect" in error_msg or "connection" in error_msg or "network" in error_msg:
+                    errors["base"] = "cannot_connect"
+                else:
+                    errors["base"] = "unknown"
+            except Exception as err:
+                _LOGGER.error("Unexpected error validating credentials: %s", err, exc_info=True)
+                errors["base"] = "unknown"
+            
+            # If there are errors, show the form again
+            if errors:
+                return self.async_show_form(
+                    step_id="octopus_credentials",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
+                            vol.Required(CONF_PASSWORD): str,
+                            vol.Required(CONF_PROPERTY_ID, default=user_input.get(CONF_PROPERTY_ID, "")): str,
+                        }
+                    ),
+                    errors=errors,
+                )
 
         return self.async_show_form(
             step_id="octopus_credentials",

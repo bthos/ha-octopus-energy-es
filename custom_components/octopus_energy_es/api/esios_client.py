@@ -83,16 +83,28 @@ class ESIOSClient:
                         "PVPC prices not yet available for %s", target_date.isoformat()
                     )
                     return []
+                if response.status == 403:
+                    _LOGGER.warning("ESIOS API access forbidden. Token may be required or invalid")
+                    # Try without token if we had one, or suggest getting a token
+                    if self._token:
+                        raise ESIOSClientError("ESIOS API access forbidden. Token may be invalid.")
+                    else:
+                        raise ESIOSClientError("ESIOS API requires a token. Please get one from consultasios@ree.es")
                 response.raise_for_status()
 
                 data = await response.json()
+                _LOGGER.debug("ESIOS API response: %s", data)
 
                 # Parse ESIOS response format
                 prices = self._parse_esios_response(data, target_date)
+                
+                if not prices:
+                    _LOGGER.warning("No prices parsed from ESIOS response for %s", target_date.isoformat())
 
                 return prices
 
         except aiohttp.ClientError as err:
+            _LOGGER.error("ESIOS API client error: %s", err)
             raise ESIOSClientError(f"Error fetching ESIOS data: {err}") from err
 
     def _parse_esios_response(
@@ -101,30 +113,52 @@ class ESIOSClient:
         """
         Parse ESIOS API response into our format.
 
-        ESIOS response format:
+        ESIOS response format can be:
         {
             "indicator": {
                 "id": 1001,
                 "name": "PVPC",
+                "values": [
+                    {
+                        "datetime": "2025-01-15T00:00:00.000+01:00",
+                        "value": 123.45,  # Price in €/MWh
+                        ...
+                    },
+                    ...
+                ]
+            }
+        }
+        Or:
+        {
+            "indicator": {
+                "id": 1001,
                 ...
             },
             "values": [
                 {
                     "datetime": "2025-01-15T00:00:00.000+01:00",
-                    "value": 123.45,  # Price in €/MWh
+                    "value": 123.45,
                     ...
-                },
-                ...
+                }
             ]
         }
         """
         prices: list[dict[str, Any]] = []
 
-        if "indicator" not in data or "values" not in data["indicator"]:
-            _LOGGER.warning("Unexpected ESIOS response format")
-            return prices
+        # Try different response formats
+        values = None
+        if "indicator" in data:
+            if "values" in data["indicator"]:
+                values = data["indicator"]["values"]
+            elif isinstance(data["indicator"], dict) and "values" in data:
+                values = data["values"]
+        elif "values" in data:
+            values = data["values"]
 
-        values = data["indicator"]["values"]
+        if not values:
+            _LOGGER.warning("Unexpected ESIOS response format: %s", data.keys())
+            _LOGGER.debug("Full ESIOS response: %s", data)
+            return prices
 
         for value_item in values:
             try:

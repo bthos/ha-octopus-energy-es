@@ -80,11 +80,21 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         # Update today's prices (hourly)
         try:
-            self._today_prices = await self._fetch_and_calculate_prices()
+            prices = await self._fetch_and_calculate_prices()
+            if prices:
+                self._today_prices = prices
+                _LOGGER.info("Successfully fetched %d price points for today", len(prices))
+            elif not self._today_prices:
+                # No prices and no cached data - log warning but don't fail completely
+                _LOGGER.warning("No price data available and no cached data")
         except Exception as err:
-            _LOGGER.warning("Error updating today's prices: %s", err)
+            _LOGGER.error("Error updating today's prices: %s", err, exc_info=True)
             if not self._today_prices:
+                # Only fail if we have no cached data at all
+                _LOGGER.error("No cached price data available, raising UpdateFailed")
                 raise UpdateFailed(f"Error updating prices: {err}") from err
+            else:
+                _LOGGER.warning("Using cached price data due to update error")
 
         # Update tomorrow's prices (daily at 14:00 CET)
         should_update_tomorrow = (
@@ -122,12 +132,21 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Error updating billing: %s", err)
             # Billing is optional, don't fail
 
-        return {
-            "today_prices": self._today_prices,
-            "tomorrow_prices": self._tomorrow_prices,
-            "consumption": self._consumption_data,
-            "billing": self._billing_data,
+        # Always return a dict, even if empty, so sensors don't fail
+        result = {
+            "today_prices": self._today_prices or [],
+            "tomorrow_prices": self._tomorrow_prices or [],
+            "consumption": self._consumption_data or [],
+            "billing": self._billing_data or {},
         }
+        
+        _LOGGER.debug(
+            "Coordinator update complete: %d today prices, %d tomorrow prices",
+            len(result["today_prices"]),
+            len(result["tomorrow_prices"]),
+        )
+        
+        return result
 
     async def _fetch_and_calculate_prices(
         self, target_date: date | None = None
@@ -137,31 +156,40 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         # Try ESIOS first
         try:
+            _LOGGER.debug("Fetching prices from ESIOS for date: %s", target_date)
             market_prices = await self._esios_client.fetch_pvpc_prices(target_date)
+            _LOGGER.debug("ESIOS returned %d price points", len(market_prices))
         except ESIOSClientError as err:
             _LOGGER.warning("ESIOS API error: %s", err)
             # Try OMIE as fallback
             try:
+                _LOGGER.debug("Trying OMIE as fallback")
                 market_prices = await self._omie_client.fetch_market_prices(
                     target_date
                 )
+                _LOGGER.debug("OMIE returned %d price points", len(market_prices))
             except Exception as fallback_err:
                 _LOGGER.warning("OMIE fallback also failed: %s", fallback_err)
                 # If both fail and we have cached data, use it
                 if target_date is None and self._today_prices:
+                    _LOGGER.info("Using cached today's prices")
                     return self._today_prices
                 elif target_date and self._tomorrow_prices:
+                    _LOGGER.info("Using cached tomorrow's prices")
                     return self._tomorrow_prices
+                _LOGGER.error("No price data available and no cache to fall back to")
                 raise
 
         if not market_prices:
             # No prices available yet (e.g., tomorrow before 14:00)
+            _LOGGER.warning("No market prices returned from APIs for %s", target_date)
             return []
 
         # Calculate prices based on tariff type
         calculated_prices = self._tariff_calculator.calculate_prices(
             market_prices, target_date
         )
+        _LOGGER.debug("Calculated %d prices for tariff", len(calculated_prices))
 
         return calculated_prices
 

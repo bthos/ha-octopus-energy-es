@@ -14,7 +14,15 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Octopus Energy Spain from a config entry."""
     coordinator = OctopusEnergyESCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    
+    # Try to refresh data, but don't fail if it doesn't work initially
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as err:
+        # Log error but continue setup - data will be fetched on next update
+        import logging
+        _LOGGER = logging.getLogger(__name__)
+        _LOGGER.warning("Initial data refresh failed, will retry: %s", err)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
