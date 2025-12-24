@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from zoneinfo import ZoneInfo
@@ -15,9 +16,7 @@ from .api.omie_client import OMIEClient
 from .api.octopus_client import OctopusClient, OctopusClientError
 from .api.tariff_scraper import TariffScraper, TariffScraperError
 from .const import (
-    CONF_EMAIL,
     CONF_ESIOS_TOKEN,
-    CONF_PASSWORD,
     CONF_PROPERTY_ID,
     DOMAIN,
     MARKET_PUBLISH_HOUR,
