@@ -264,21 +264,62 @@ class OctopusEnergyESPriceSensor(OctopusEnergyESSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
         data = self.coordinator.data
-        prices = data.get("today_prices", [])
-
-        # Format data for price-timeline-card compatibility
+        today_prices = data.get("today_prices", [])
+        tomorrow_prices = data.get("tomorrow_prices", [])
+        
+        # Combine today and tomorrow prices for data attribute (ha_epex_spot format)
+        all_prices = today_prices + tomorrow_prices
+        
+        # Format data for price-timeline-card compatibility (ha_epex_spot format)
         price_data = [
             {
-                ATTR_START_TIME: price["start_time"],
-                ATTR_PRICE_PER_KWH: price["price_per_kwh"],
+                "start_time": price["start_time"],
+                "price_per_kwh": price["price_per_kwh"],
             }
-            for price in prices
+            for price in all_prices
         ]
-
-        return {
-            ATTR_DATA: price_data,
-            ATTR_UNIT_OF_MEASUREMENT: "€/kWh",
+        
+        # Separate today and tomorrow prices (ha_epex_spot format)
+        today_data = [
+            {
+                "start_time": price["start_time"],
+                "price_per_kwh": price["price_per_kwh"],
+            }
+            for price in today_prices
+        ]
+        
+        tomorrow_data = [
+            {
+                "start_time": price["start_time"],
+                "price_per_kwh": price["price_per_kwh"],
+            }
+            for price in tomorrow_prices
+        ]
+        
+        # Add individual hour attributes (price_00h, price_01h, etc.) for today
+        hour_attributes = {}
+        for price in today_prices:
+            try:
+                price_dt = datetime.fromisoformat(price["start_time"].replace("Z", "+00:00"))
+                if price_dt.tzinfo is None:
+                    price_dt = price_dt.replace(tzinfo=ZoneInfo("UTC"))
+                price_dt_madrid = price_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                hour = price_dt_madrid.hour
+                hour_attributes[f"price_{hour:02d}h"] = price["price_per_kwh"]
+            except (ValueError, TypeError):
+                continue
+        
+        attributes = {
+            "data": price_data,  # All prices (today + tomorrow)
+            "today": today_data,  # Today's prices only
+            "tomorrow": tomorrow_data,  # Tomorrow's prices only
+            "unit_of_measurement": "€/kWh",
         }
+        
+        # Add individual hour attributes
+        attributes.update(hour_attributes)
+        
+        return attributes
 
 
 class OctopusEnergyESCurrentPriceSensor(OctopusEnergyESSensor):
