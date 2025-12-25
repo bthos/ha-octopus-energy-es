@@ -42,10 +42,6 @@ UPDATE_INTERVAL_BILLING = timedelta(hours=24)
 # Spanish market publishes tomorrow's prices at 14:00 CET
 MARKET_PUBLISH_HOUR = 14
 
-# API endpoints
-ESIOS_API_BASE_URL = "https://api.esios.ree.es"
-ESIOS_API_INDICATOR_PVPC = 1001  # PVPC hourly prices
-
 # Octopus Energy España uses GraphQL API
 OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
 
