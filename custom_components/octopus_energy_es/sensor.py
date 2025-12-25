@@ -243,7 +243,7 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": "Octopus Energy España",
-            "manufacturer": "Octopus Energy",
+            "manufacturer": "Octopus Energy España",
             "model": coordinator._entry.data.get("pricing_model", "Unknown"),
         }
 
@@ -919,7 +919,8 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         # If we couldn't match hourly consumption with hourly prices,
         # fall back to using daily total consumption and average price
         if matched_hours == 0:
-            daily_consumption = daily_totals[target_date]
+            # Get daily consumption for target date (should exist since we selected it from daily_totals)
+            daily_consumption = daily_totals.get(target_date, 0.0)
             
             # Get prices for the target date
             daily_prices: list[float] = []
@@ -928,16 +929,22 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
                 if price_dt_madrid and price_dt_madrid.date() == target_date:
                     daily_prices.append(price.get("price_per_kwh", 0))
 
+            # If no prices for target date, use average of all available prices as fallback
             if not daily_prices:
-                # If no hourly prices for target date, return None
-                self._cost_breakdown = None
-                return None
-
-            # Calculate average price for the day
-            avg_price = sum(daily_prices) / len(daily_prices)
-            
-            # Calculate energy cost
-            energy_cost = daily_consumption * avg_price
+                # Use all available prices as fallback
+                all_available_prices = [p.get("price_per_kwh", 0) for p in prices if p.get("price_per_kwh") is not None]
+                if all_available_prices:
+                    avg_price = sum(all_available_prices) / len(all_available_prices)
+                    energy_cost = daily_consumption * avg_price
+                else:
+                    # No prices available at all, return None
+                    self._cost_breakdown = None
+                    return None
+            else:
+                # Calculate average price for the day
+                avg_price = sum(daily_prices) / len(daily_prices)
+                # Calculate energy cost
+                energy_cost = daily_consumption * avg_price
 
         # Calculate power cost (if power rates are configured)
         # Note: Power value should be provided by user if not available via API
@@ -1112,10 +1119,23 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
             return None
 
         try:
-            # Parse dates (they should be ISO format strings)
-            last_start = datetime.fromisoformat(start_str.replace("Z", "+00:00")).date()
-            last_end = datetime.fromisoformat(end_str.replace("Z", "+00:00")).date()
-        except (ValueError, AttributeError):
+            # Parse dates (they are ISO format date strings like "2025-01-15" from isoformat())
+            # Use date.fromisoformat() for ISO date strings, or datetime.fromisoformat() for datetime strings
+            if "T" in start_str or "+" in start_str or "Z" in start_str:
+                # It's a datetime string
+                last_start = datetime.fromisoformat(start_str.replace("Z", "+00:00")).date()
+            else:
+                # It's a plain date string (YYYY-MM-DD)
+                last_start = date.fromisoformat(start_str)
+            
+            if "T" in end_str or "+" in end_str or "Z" in end_str:
+                # It's a datetime string
+                last_end = datetime.fromisoformat(end_str.replace("Z", "+00:00")).date()
+            else:
+                # It's a plain date string (YYYY-MM-DD)
+                last_end = date.fromisoformat(end_str)
+        except (ValueError, AttributeError, TypeError) as e:
+            _LOGGER.debug("Error parsing invoice dates: %s (start=%s, end=%s)", e, start_str, end_str)
             return None
 
         # Calculate next period
