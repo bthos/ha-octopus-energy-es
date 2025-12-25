@@ -819,38 +819,125 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
     """Daily cost sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the daily cost sensor."""
+        super().__init__(coordinator, description)
+        self._cost_date: date | None = None
+        self._is_today: bool = False
+        self._data_available_until: date | None = None
+
     @property
     def native_value(self) -> float | None:
-        """Return daily cost."""
+        """Return daily cost (today's if available, otherwise most recent available)."""
         data = self.coordinator.data
         prices = data.get("today_prices", [])
         consumption = data.get("consumption", [])
 
         if not prices or not consumption:
+            self._cost_date = None
+            self._is_today = False
+            self._data_available_until = None
             return None
 
-        today = datetime.now(ZoneInfo(TIMEZONE_MADRID)).date()
-        total_cost = 0.0
+        # Group consumption by date and calculate daily totals
+        daily_totals: dict[date, float] = {}
+        all_dates: list[date] = []
+        
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
 
-        # Match consumption with prices
         for item in consumption:
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid and item_dt_madrid.date() == today:
-                        hour = item_dt_madrid.hour
-                        # Find matching price
-                        for price in prices:
-                            price_dt_madrid = _parse_datetime_to_madrid(price["start_time"])
-                            if price_dt_madrid and price_dt_madrid.hour == hour:
-                                consumption_value = float(
-                                    item.get("consumption", item.get("value", 0))
-                                )
-                                total_cost += consumption_value * price["price_per_kwh"]
-                                break
+                    if item_dt_madrid:
+                        item_date = item_dt_madrid.date()
+                        if item_date not in daily_totals:
+                            daily_totals[item_date] = 0.0
+                            all_dates.append(item_date)
+                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
 
-        return round(total_cost, 2) if total_cost > 0 else None
+        if not daily_totals:
+            self._cost_date = None
+            self._is_today = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent date with data
+        all_dates.sort(reverse=True)
+        self._data_available_until = all_dates[0]
+
+        # Try today first, then fall back to most recent available date
+        target_date = today if today in daily_totals else all_dates[0]
+        self._cost_date = target_date
+        self._is_today = (target_date == today)
+
+        # Calculate cost for the target date
+        # Match hourly consumption with hourly prices for accurate cost calculation
+        total_cost = 0.0
+        
+        # Group consumption by hour for the target date
+        hourly_consumption: dict[int, float] = {}
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.date() == target_date:
+                        hour = item_dt_madrid.hour
+                        if hour not in hourly_consumption:
+                            hourly_consumption[hour] = 0.0
+                        hourly_consumption[hour] += float(item.get("consumption", item.get("value", 0)))
+
+        # Match hourly consumption with hourly prices
+        matched_hours = 0
+        for hour, consumption_value in hourly_consumption.items():
+            # Find matching price for this hour
+            for price in prices:
+                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                if price_dt_madrid and price_dt_madrid.date() == target_date and price_dt_madrid.hour == hour:
+                    total_cost += consumption_value * price.get("price_per_kwh", 0)
+                    matched_hours += 1
+                    break
+
+        # If we couldn't match hourly consumption with hourly prices,
+        # fall back to using daily total consumption and average price
+        if matched_hours == 0:
+            daily_consumption = daily_totals[target_date]
+            
+            # Get prices for the target date
+            daily_prices: list[float] = []
+            for price in prices:
+                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                if price_dt_madrid and price_dt_madrid.date() == target_date:
+                    daily_prices.append(price.get("price_per_kwh", 0))
+
+            if not daily_prices:
+                # If no hourly prices for target date, return None
+                return None
+
+            # Calculate average price for the day
+            avg_price = sum(daily_prices) / len(daily_prices)
+            
+            # Calculate total cost
+            total_cost = daily_consumption * avg_price
+
+        return round(total_cost, 2) if total_cost >= 0 else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+        
+        if self._cost_date:
+            attrs["cost_date"] = self._cost_date.isoformat()
+        attrs["is_today"] = self._is_today
+        
+        if self._data_available_until:
+            attrs["data_available_until"] = self._data_available_until.isoformat()
+        
+        return attrs
 
 
 class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
