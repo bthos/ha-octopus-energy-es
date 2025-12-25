@@ -164,6 +164,12 @@ SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:currency-eur",
 )
 
+ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="account",
+    name="Octopus Energy España Account",
+    icon="mdi:account",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -208,6 +214,7 @@ async def async_setup_entry(
         OctopusEnergyESSunClubPowerUpSavingsSensor(
             coordinator, SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION
         ),
+        OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
     ]
 
     async_add_entities(entities)
@@ -641,4 +648,37 @@ class OctopusEnergyESSunClubPowerUpSavingsSensor(OctopusEnergyESSensor):
 
         totals = credits.get("totals", {})
         return totals.get("sun_club_power_up")
+
+
+class OctopusEnergyESAccountSensor(OctopusEnergyESSensor):
+    """Account information sensor."""
+
+    @property
+    def native_value(self) -> str | None:
+        """Return account ID."""
+        data = self.coordinator.data
+        account = data.get("account", {})
+        
+        if not account:
+            return None
+        
+        return account.get("account_id")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return account attributes."""
+        data = self.coordinator.data
+        account = data.get("account", {})
+        
+        if not account:
+            return {}
+        
+        return {
+            "name": account.get("name"),
+            "email": account.get("email"),
+            "mobile": account.get("mobile"),
+            "address": account.get("address"),
+            "tariff": account.get("tariff"),
+            "cups": account.get("cups"),
+        }
 

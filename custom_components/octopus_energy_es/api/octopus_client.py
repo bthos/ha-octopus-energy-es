@@ -770,3 +770,124 @@ class OctopusClient:
             _LOGGER.error("Error fetching accounts: %s", err)
             return []
 
+    async def fetch_account_info(self) -> dict[str, Any] | None:
+        """
+        Fetch account information including name, email, mobile, address, and tariff.
+
+        Returns:
+            Dictionary with account information, or None if not available
+        """
+        query = """
+            query AccountInfo($accountNumber: String!) {
+                account(accountNumber: $accountNumber) {
+                    number
+                    properties {
+                        id
+                        address {
+                            line1
+                            line2
+                            city
+                            postcode
+                            country
+                        }
+                        electricitySupplyPoints {
+                            cups
+                            tariff {
+                                name
+                                code
+                            }
+                        }
+                    }
+                }
+                viewer {
+                    firstName
+                    lastName
+                    email
+                    mobile
+                }
+            }
+        """
+        
+        # Get account number
+        account = self._property_id
+        if not account:
+            accounts = await self.fetch_properties()
+            if accounts:
+                account = accounts[0]["number"]
+            else:
+                _LOGGER.warning("No account number available for fetching account info")
+                return None
+        
+        try:
+            client = await self._get_graphql_client()
+            response = await client.execute_async(query, {"accountNumber": account})
+            
+            if "errors" in response:
+                _LOGGER.error("GraphQL error fetching account info: %s", response["errors"])
+                return None
+            
+            if "data" not in response:
+                _LOGGER.warning("Unexpected response format when fetching account info")
+                return None
+            
+            data = response["data"]
+            account_data = data.get("account", {})
+            viewer_data = data.get("viewer", {})
+            
+            # Get account number
+            account_id = account_data.get("number", account)
+            
+            # Get address from first property
+            address_parts = []
+            properties = account_data.get("properties", [])
+            if properties:
+                property_data = properties[0]
+                address = property_data.get("address", {})
+                if address:
+                    if address.get("line1"):
+                        address_parts.append(address["line1"])
+                    if address.get("line2"):
+                        address_parts.append(address["line2"])
+                    if address.get("city"):
+                        address_parts.append(address["city"])
+                    if address.get("postcode"):
+                        address_parts.append(address["postcode"])
+                    if address.get("country"):
+                        address_parts.append(address["country"])
+                
+                # Get tariff and CUPS from first supply point
+                supply_points = property_data.get("electricitySupplyPoints", [])
+                tariff_name = None
+                cups = None
+                if supply_points:
+                    supply_point = supply_points[0]
+                    cups = supply_point.get("cups")
+                    tariff = supply_point.get("tariff", {})
+                    tariff_name = tariff.get("name") or tariff.get("code")
+            
+            # Get user info
+            first_name = viewer_data.get("firstName", "")
+            last_name = viewer_data.get("lastName", "")
+            name = f"{first_name} {last_name}".strip() if first_name or last_name else None
+            email = viewer_data.get("email")
+            mobile = viewer_data.get("mobile")
+            
+            account_info = {
+                "account_id": account_id,
+                "name": name,
+                "email": email,
+                "mobile": mobile,
+                "address": ", ".join(address_parts) if address_parts else None,
+                "tariff": tariff_name,
+                "cups": cups,
+            }
+            
+            _LOGGER.debug("Fetched account info: %s", account_info)
+            return account_info
+            
+        except Exception as err:
+            if isinstance(err, OctopusClientError):
+                raise
+            _LOGGER.error("Error fetching account info: %s", err, exc_info=True)
+            return None
+
