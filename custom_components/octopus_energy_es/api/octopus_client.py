@@ -783,19 +783,9 @@ class OctopusClient:
                     number
                     properties {
                         id
-                        address {
-                            line1
-                            line2
-                            city
-                            postcode
-                            country
-                        }
+                        address
                         electricitySupplyPoints {
                             cups
-                            tariff {
-                                name
-                                code
-                            }
                         }
                     }
                 }
@@ -837,33 +827,19 @@ class OctopusClient:
             # Get account number
             account_id = account_data.get("number", account)
             
-            # Get address from first property
-            address_parts = []
+            # Get address from first property (address is a string)
+            address_str = None
             properties = account_data.get("properties", [])
             if properties:
                 property_data = properties[0]
-                address = property_data.get("address", {})
-                if address:
-                    if address.get("line1"):
-                        address_parts.append(address["line1"])
-                    if address.get("line2"):
-                        address_parts.append(address["line2"])
-                    if address.get("city"):
-                        address_parts.append(address["city"])
-                    if address.get("postcode"):
-                        address_parts.append(address["postcode"])
-                    if address.get("country"):
-                        address_parts.append(address["country"])
+                address_str = property_data.get("address")
                 
-                # Get tariff and CUPS from first supply point
+                # Get CUPS from first supply point
                 supply_points = property_data.get("electricitySupplyPoints", [])
-                tariff_name = None
                 cups = None
                 if supply_points:
                     supply_point = supply_points[0]
                     cups = supply_point.get("cups")
-                    tariff = supply_point.get("tariff", {})
-                    tariff_name = tariff.get("name") or tariff.get("code")
             
             # Get user info
             first_name = viewer_data.get("firstName", "")
@@ -877,8 +853,8 @@ class OctopusClient:
                 "name": name,
                 "email": email,
                 "mobile": mobile,
-                "address": ", ".join(address_parts) if address_parts else None,
-                "tariff": tariff_name,
+                "address": address_str,
+                "tariff": None,  # Tariff not available from API, use config entry instead
                 "cups": cups,
             }
             

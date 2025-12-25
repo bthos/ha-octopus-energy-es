@@ -17,6 +17,7 @@ from .api.tariff_scraper import TariffScraper, TariffScraperError
 from .const import (
     CONF_PROPERTY_ID,
     CONF_PVPC_SENSOR,
+    CONF_TARIFF_TYPE,
     DOMAIN,
     MARKET_PUBLISH_HOUR,
     TIMEZONE_MADRID,
@@ -179,6 +180,10 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             try:
                 account_info = await self._octopus_client.fetch_account_info()
                 if account_info:
+                    # Add tariff from config entry since it's not available from API
+                    tariff_type = self._entry.data.get(CONF_TARIFF_TYPE)
+                    if tariff_type:
+                        account_info["tariff"] = tariff_type
                     self._account_data = account_info
             except OctopusClientError as err:
                 error_msg = str(err).lower()
