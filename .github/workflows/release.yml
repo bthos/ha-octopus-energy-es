@@ -80,11 +80,13 @@ jobs:
             echo "- No commits found" > changelog.txt
           fi
           
-          # Use delimiter to handle multiline output
+          # Use delimiter to handle multiline output properly
+          # Use a unique delimiter that won't appear in commit messages
+          DELIMITER="CHANGELOG_EOF_$(date +%s)"
           {
-            echo 'changelog<<EOF'
+            echo "changelog<<${DELIMITER}"
             cat changelog.txt
-            echo EOF
+            echo "${DELIMITER}"
           } >> $GITHUB_OUTPUT
           
           echo "Generated changelog:"
