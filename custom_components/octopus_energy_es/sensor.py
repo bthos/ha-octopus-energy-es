@@ -365,19 +365,29 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Sum consumption for today
-        today = datetime.now(ZoneInfo(TIMEZONE_MADRID)).date()
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
         total = 0.0
 
         for item in consumption:
             # Parse consumption item (format may vary)
             if isinstance(item, dict):
-                item_date_str = item.get("date") or item.get("start_time")
-                if item_date_str:
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
                     try:
-                        item_date = datetime.fromisoformat(item_date_str).date()
+                        # Parse datetime and convert to Madrid timezone
+                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
+                        if item_dt.tzinfo is None:
+                            # If no timezone, assume UTC
+                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Madrid timezone
+                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                        item_date = item_dt_madrid.date()
+                        
                         if item_date == today:
                             total += float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug("Error parsing consumption date: %s", err)
                         continue
 
         return round(total, 3) if total > 0 else None
@@ -403,10 +413,19 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
                 item_time_str = item.get("start_time") or item.get("datetime")
                 if item_time_str:
                     try:
-                        item_time = datetime.fromisoformat(item_time_str)
-                        if item_time.replace(minute=0, second=0, microsecond=0) == current_hour:
+                        # Parse datetime and convert to Madrid timezone
+                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
+                        if item_dt.tzinfo is None:
+                            # If no timezone, assume UTC
+                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Madrid timezone
+                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                        item_hour = item_dt_madrid.replace(minute=0, second=0, microsecond=0)
+                        
+                        if item_hour == current_hour:
                             return float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug("Error parsing consumption time: %s", err)
                         continue
 
         return None
@@ -432,13 +451,21 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
 
         for item in consumption:
             if isinstance(item, dict):
-                item_date_str = item.get("date") or item.get("start_time")
-                if item_date_str:
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
                     try:
-                        item_date = datetime.fromisoformat(item_date_str)
-                        if item_date.month == current_month and item_date.year == current_year:
+                        # Parse datetime and convert to Madrid timezone
+                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
+                        if item_dt.tzinfo is None:
+                            # If no timezone, assume UTC
+                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Madrid timezone
+                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                        
+                        if item_dt_madrid.month == current_month and item_dt_madrid.year == current_year:
                             total += float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug("Error parsing consumption date: %s", err)
                         continue
 
         return round(total, 3) if total > 0 else None
@@ -463,24 +490,35 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         # Match consumption with prices
         for item in consumption:
             if isinstance(item, dict):
-                item_date_str = item.get("date") or item.get("start_time")
-                if item_date_str:
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
                     try:
-                        item_date = datetime.fromisoformat(item_date_str).date()
+                        # Parse datetime and convert to Madrid timezone
+                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
+                        if item_dt.tzinfo is None:
+                            # If no timezone, assume UTC
+                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Madrid timezone
+                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                        item_date = item_dt_madrid.date()
+                        hour = item_dt_madrid.hour
+                        
                         if item_date == today:
-                            item_time = datetime.fromisoformat(item_date_str)
-                            hour = item_time.hour
-
                             # Find matching price
                             for price in prices:
-                                price_time = datetime.fromisoformat(price["start_time"])
-                                if price_time.hour == hour:
+                                price_dt = datetime.fromisoformat(price["start_time"].replace("Z", "+00:00"))
+                                if price_dt.tzinfo is None:
+                                    price_dt = price_dt.replace(tzinfo=ZoneInfo("UTC"))
+                                price_dt_madrid = price_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                                
+                                if price_dt_madrid.hour == hour:
                                     consumption_value = float(
                                         item.get("consumption", item.get("value", 0))
                                     )
                                     total_cost += consumption_value * price["price_per_kwh"]
                                     break
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug("Error parsing consumption date for cost calculation: %s", err)
                         continue
 
         return round(total_cost, 2) if total_cost > 0 else None
