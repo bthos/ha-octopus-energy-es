@@ -28,6 +28,29 @@ from .coordinator import OctopusEnergyESCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _parse_datetime_to_madrid(dt_str: str) -> datetime | None:
+    """
+    Parse a datetime string and convert it to Madrid timezone.
+    
+    Args:
+        dt_str: ISO datetime string (may include 'Z' for UTC)
+        
+    Returns:
+        Datetime object in Madrid timezone, or None if parsing fails
+    """
+    try:
+        # Parse datetime and convert to Madrid timezone
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            # If no timezone, assume UTC
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        # Convert to Madrid timezone
+        return dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+    except (ValueError, TypeError) as err:
+        _LOGGER.debug("Error parsing datetime '%s': %s", dt_str, err)
+        return None
+
 PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="price",
     name="Octopus Energy España Price",
@@ -415,21 +438,9 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
-                    try:
-                        # Parse datetime and convert to Madrid timezone
-                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
-                        if item_dt.tzinfo is None:
-                            # If no timezone, assume UTC
-                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
-                        # Convert to Madrid timezone
-                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
-                        item_date = item_dt_madrid.date()
-                        
-                        if item_date == today:
-                            total += float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.debug("Error parsing consumption date: %s", err)
-                        continue
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.date() == today:
+                        total += float(item.get("consumption", item.get("value", 0)))
 
         return round(total, 3) if total > 0 else None
 
@@ -453,21 +464,11 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("datetime")
                 if item_time_str:
-                    try:
-                        # Parse datetime and convert to Madrid timezone
-                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
-                        if item_dt.tzinfo is None:
-                            # If no timezone, assume UTC
-                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
-                        # Convert to Madrid timezone
-                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid:
                         item_hour = item_dt_madrid.replace(minute=0, second=0, microsecond=0)
-                        
                         if item_hour == current_hour:
                             return float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.debug("Error parsing consumption time: %s", err)
-                        continue
 
         return None
 
@@ -494,20 +495,9 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
-                    try:
-                        # Parse datetime and convert to Madrid timezone
-                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
-                        if item_dt.tzinfo is None:
-                            # If no timezone, assume UTC
-                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
-                        # Convert to Madrid timezone
-                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
-                        
-                        if item_dt_madrid.month == current_month and item_dt_madrid.year == current_year:
-                            total += float(item.get("consumption", item.get("value", 0)))
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.debug("Error parsing consumption date: %s", err)
-                        continue
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.month == current_month and item_dt_madrid.year == current_year:
+                        total += float(item.get("consumption", item.get("value", 0)))
 
         return round(total, 3) if total > 0 else None
 
@@ -533,34 +523,18 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
-                    try:
-                        # Parse datetime and convert to Madrid timezone
-                        item_dt = datetime.fromisoformat(item_time_str.replace("Z", "+00:00"))
-                        if item_dt.tzinfo is None:
-                            # If no timezone, assume UTC
-                            item_dt = item_dt.replace(tzinfo=ZoneInfo("UTC"))
-                        # Convert to Madrid timezone
-                        item_dt_madrid = item_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
-                        item_date = item_dt_madrid.date()
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.date() == today:
                         hour = item_dt_madrid.hour
-                        
-                        if item_date == today:
-                            # Find matching price
-                            for price in prices:
-                                price_dt = datetime.fromisoformat(price["start_time"].replace("Z", "+00:00"))
-                                if price_dt.tzinfo is None:
-                                    price_dt = price_dt.replace(tzinfo=ZoneInfo("UTC"))
-                                price_dt_madrid = price_dt.astimezone(ZoneInfo(TIMEZONE_MADRID))
-                                
-                                if price_dt_madrid.hour == hour:
-                                    consumption_value = float(
-                                        item.get("consumption", item.get("value", 0))
-                                    )
-                                    total_cost += consumption_value * price["price_per_kwh"]
-                                    break
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.debug("Error parsing consumption date for cost calculation: %s", err)
-                        continue
+                        # Find matching price
+                        for price in prices:
+                            price_dt_madrid = _parse_datetime_to_madrid(price["start_time"])
+                            if price_dt_madrid and price_dt_madrid.hour == hour:
+                                consumption_value = float(
+                                    item.get("consumption", item.get("value", 0))
+                                )
+                                total_cost += consumption_value * price["price_per_kwh"]
+                                break
 
         return round(total_cost, 2) if total_cost > 0 else None
 
