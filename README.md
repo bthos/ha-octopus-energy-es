@@ -1,4 +1,4 @@
-# ha-octopus-energy-es
+# Octopus Energy España - Home Assistant Integration
 
 Home Assistant custom component for Octopus Energy Spain, providing electricity price sensors, consumption tracking, and billing data integration.
 
@@ -152,29 +152,6 @@ The sensor provides data in the required format:
 - **Consumption Data**: Updated every 15 minutes (if available)
 - **Billing Data**: Updated daily
 
-## Migration from ha_epex_spot
-
-If you're migrating from `ha_epex_spot`:
-
-1. Install this integration
-2. Configure with your Octopus Energy Spain tariff
-3. Update your Lovelace cards to use `sensor.octopus_energy_es_price` instead of the EPEX sensor
-4. The sensor format is compatible, so minimal changes are needed
-
-### Example Migration
-
-**Before (ha_epex_spot):**
-```yaml
-type: custom:price-timeline-card
-entity: sensor.epex_spot_es_price
-```
-
-**After (octopus_energy_es):**
-```yaml
-type: custom:price-timeline-card
-entity: sensor.octopus_energy_es_price
-```
-
 ## Troubleshooting
 
 ### Authentication Errors
@@ -197,7 +174,7 @@ entity: sensor.octopus_energy_es_price
 ### Consumption Data Not Available
 
 - Verify your Octopus Energy credentials are correct
-- Check that your account number was detected correctly (see [Troubleshooting Account Auto-Detection](TROUBLESHOOTING_ACCOUNT_DETECTION.md))
+- Check that your account number was detected correctly
 - Ensure your account has consumption data available
 - Consumption data may take some time to appear after initial setup
 
@@ -244,5 +221,4 @@ This project is licensed under the MIT License.
 ## Acknowledgments
 
 - Based on the Spanish electricity market integration plan
-- References [octopus-spain-monitor](https://github.com/jdvr/octopus-spain-monitor) for API integration patterns
 - Uses ESIOS API from Red Eléctrica de España for market data

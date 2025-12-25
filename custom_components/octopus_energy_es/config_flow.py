@@ -181,9 +181,24 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 # Other authentication errors - provide user-friendly messages
                 _LOGGER.error("Error validating credentials: %s", err)
-                if "401" in error_msg or "invalid" in error_msg or "credentials" in error_msg:
+                # Check for invalid credentials errors (including GraphQL validation errors)
+                if any(phrase in error_msg for phrase in [
+                    "401", 
+                    "invalid", 
+                    "credentials", 
+                    "incorrect",
+                    "wrong",
+                    "please make sure",
+                    "please check",
+                    "kt-ct-1138"  # GraphQL error code for invalid credentials
+                ]):
                     errors["base"] = "invalid_auth"
-                elif "cannot_connect" in error_msg or "connection" in error_msg or "network" in error_msg or "timeout" in error_msg:
+                elif any(phrase in error_msg for phrase in [
+                    "cannot_connect", 
+                    "connection", 
+                    "network", 
+                    "timeout"
+                ]):
                     errors["base"] = "cannot_connect"
                 else:
                     errors["base"] = "unknown"

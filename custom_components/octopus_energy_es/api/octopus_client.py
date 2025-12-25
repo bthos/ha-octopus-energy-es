@@ -65,11 +65,41 @@ class OctopusClient:
             response = await client.execute_async(mutation, variables)
 
             if "errors" in response:
-                error_msg = str(response["errors"])
-                _LOGGER.error("GraphQL authentication error: %s", error_msg)
-                if "401" in error_msg or "invalid" in error_msg.lower() or "credentials" in error_msg.lower():
-                    raise OctopusClientError("Invalid Octopus Energy credentials")
-                raise OctopusClientError(f"Authentication failed: {error_msg}")
+                errors = response["errors"]
+                _LOGGER.error("GraphQL authentication error: %s", errors)
+                
+                # Extract user-friendly error message from GraphQL error structure
+                error_message = None
+                for error in errors:
+                    if isinstance(error, dict):
+                        # Check for errorDescription in extensions
+                        extensions = error.get("extensions", {})
+                        if "errorDescription" in extensions:
+                            error_message = extensions["errorDescription"]
+                            break
+                        # Check for validation errors
+                        validation_errors = extensions.get("validationErrors", [])
+                        if validation_errors:
+                            error_message = validation_errors[0].get("message")
+                            break
+                        # Fall back to main message
+                        if "message" in error:
+                            error_message = error["message"]
+                            break
+                
+                # Default message if we couldn't extract one
+                if not error_message:
+                    error_message = str(errors)
+                
+                # Check if it's a credentials error
+                error_msg_lower = error_message.lower()
+                if any(phrase in error_msg_lower for phrase in [
+                    "invalid", "credentials", "incorrect", "wrong", 
+                    "please make sure", "kt-ct-1138"
+                ]):
+                    raise OctopusClientError("Invalid Octopus Energy credentials. Please check your email and password.")
+                
+                raise OctopusClientError(f"Authentication failed: {error_message}")
 
             if "data" not in response or "obtainKrakenToken" not in response["data"]:
                 _LOGGER.error("Unexpected authentication response: %s", response)
@@ -194,19 +224,15 @@ class OctopusClient:
         query = """
             query MeasurementsQuery(
                 $accountNumber: String!
-                $propertyId: String!
-                $utilityType: UtilityType!
-                $readingDirection: ReadingDirection!
                 $startAt: DateTime!
                 $endAt: DateTime!
                 $first: Int!
                 $after: String
             ) {
                 account(accountNumber: $accountNumber) {
-                    properties(propertyId: $propertyId) {
+                    properties {
+                        id
                         measurements(
-                            utilityType: $utilityType
-                            readingDirection: $readingDirection
                             startAt: $startAt
                             endAt: $endAt
                             first: $first
@@ -218,10 +244,14 @@ class OctopusClient:
                             }
                             edges {
                                 node {
-                                    startAt
-                                    endAt
-                                    value
-                                    unit
+                                    ... on IntervalMeasurementType {
+                                        startAt
+                                        endAt
+                                        value
+                                        unit
+                                        utilityType
+                                        readingDirection
+                                    }
                                 }
                             }
                         }
@@ -272,9 +302,6 @@ class OctopusClient:
             while True:
                 variables: dict[str, Any] = {
                     "accountNumber": account,
-                    "propertyId": property_id,
-                    "utilityType": "ELECTRICITY",
-                    "readingDirection": "CONSUMPTION",
                     "startAt": start_date.isoformat() + "T00:00:00Z",
                     "endAt": end_date.isoformat() + "T23:59:59Z",
                     "first": page_size,
@@ -302,12 +329,29 @@ class OctopusClient:
                 if not properties or len(properties) == 0:
                     break
                 
-                measurements = properties[0].get("measurements", {})
+                # Find the property matching our property_id
+                target_property = None
+                for prop in properties:
+                    if prop.get("id") == property_id:
+                        target_property = prop
+                        break
+                
+                if not target_property:
+                    _LOGGER.warning("Property ID %s not found in properties list", property_id)
+                    break
+                
+                measurements = target_property.get("measurements", {})
                 edges = measurements.get("edges", [])
                 
-                # Extract measurements
+                # Extract measurements (filter for ELECTRICITY CONSUMPTION)
                 for edge in edges:
                     node = edge.get("node", {})
+                    # Filter for electricity consumption measurements only
+                    utility_type = node.get("utilityType", "")
+                    reading_direction = node.get("readingDirection", "")
+                    if utility_type != "ELECTRICITY" or reading_direction != "CONSUMPTION":
+                        continue
+                    
                     measurement = {
                         "start_time": node.get("startAt"),
                         "end_time": node.get("endAt"),
@@ -450,11 +494,19 @@ class OctopusClient:
             end_date = (datetime.fromisoformat(invoice["consumptionEndDate"].replace("Z", "+00:00")) - timedelta(seconds=1)).date()
 
             # Invoice amount is likely in cents, convert to euros
-            invoice_amount = invoice.get("amount", 0)
-            if invoice_amount and invoice_amount > 1000:  # Likely in cents
-                invoice_amount = float(invoice_amount) / 100
+            invoice_amount_raw = invoice.get("amount", 0)
+            if invoice_amount_raw is None:
+                invoice_amount = 0.0
             else:
-                invoice_amount = float(invoice_amount) if invoice_amount else 0
+                # Convert to float first, then check if it's in cents
+                try:
+                    invoice_amount = float(invoice_amount_raw)
+                    # If amount is greater than 1000, it's likely in cents
+                    if invoice_amount > 1000:
+                        invoice_amount = invoice_amount / 100
+                except (ValueError, TypeError):
+                    _LOGGER.warning("Invalid invoice amount format: %s", invoice_amount_raw)
+                    invoice_amount = 0.0
 
             return {
                 "solar_wallet": float(solar_wallet["balance"]) / 100 if solar_wallet else 0,
@@ -505,7 +557,7 @@ class OctopusClient:
               $accountNumber: String!
               $ledgerNumber: String
               $after: String
-              $fromDate: String!
+              $fromDate: Date!
             ) {
               account(accountNumber: $accountNumber) {
                 ledgers(ledgerNumber: $ledgerNumber) {
