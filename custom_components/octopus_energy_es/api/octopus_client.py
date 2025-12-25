@@ -1140,36 +1140,52 @@ class OctopusClient:
                 if not after:
                     break
             
-            # Filter SUN CLUB credits
-            sun_club_credits = [
-                c for c in all_credits
-                if c.get("reasonCode", "").startswith(CREDIT_REASON_SUN_CLUB)
-            ]
+            # Log all reason codes found for investigation
+            all_reason_codes = set()
+            for credit in all_credits:
+                reason_code = credit.get("reasonCode", "")
+                if reason_code:
+                    all_reason_codes.add(reason_code)
             
-            # Calculate totals
+            if all_reason_codes:
+                _LOGGER.debug(
+                    "Found %d unique reason codes in credits: %s",
+                    len(all_reason_codes),
+                    sorted(all_reason_codes)
+                )
+            else:
+                _LOGGER.debug("No credits found or no reason codes in credits")
+            
+            # Group credits by reason code dynamically
+            credits_by_reason_code: dict[str, list[dict[str, Any]]] = {}
+            for credit in all_credits:
+                reason_code = credit.get("reasonCode", "UNKNOWN")
+                if reason_code not in credits_by_reason_code:
+                    credits_by_reason_code[reason_code] = []
+                credits_by_reason_code[reason_code].append(credit)
+            
+            # Calculate totals by reason code
+            totals_by_reason_code: dict[str, float] = {}
+            for reason_code, credits_list in credits_by_reason_code.items():
+                totals_by_reason_code[reason_code] = sum(
+                    float(c.get("amount", 0)) / 100 for c in credits_list
+                )
+            
+            # Calculate date-based totals (all credits, not just SUN_CLUB)
             now = datetime.now(self._timezone)
             current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
             last_month_end = current_month_start - timedelta(seconds=1)
             
-            total_sun_club = 0.0
-            total_sun_club_power_up = 0.0
             total_current_month = 0.0
             total_last_month = 0.0
             total_all = 0.0
             
-            for credit in sun_club_credits:
+            for credit in all_credits:
                 amount = float(credit.get("amount", 0)) / 100  # Convert cents to euros
-                reason_code = credit.get("reasonCode", "")
                 created_at_str = credit.get("createdAt")
                 
                 total_all += amount
-                
-                # Categorize by reason code
-                if reason_code == CREDIT_REASON_SUN_CLUB:
-                    total_sun_club += amount
-                elif reason_code.startswith(CREDIT_REASON_SUN_CLUB_POWER_UP):
-                    total_sun_club_power_up += amount
                 
                 # Date-based totals
                 if created_at_str:
@@ -1185,11 +1201,22 @@ class OctopusClient:
                     except (ValueError, AttributeError) as err:
                         _LOGGER.debug("Error parsing credit date %s: %s", created_at_str, err)
             
+            # For backward compatibility, also calculate SUN_CLUB specific totals
+            sun_club_total = totals_by_reason_code.get(CREDIT_REASON_SUN_CLUB, 0.0)
+            sun_club_power_up_total = 0.0
+            for reason_code, total in totals_by_reason_code.items():
+                if reason_code.startswith(CREDIT_REASON_SUN_CLUB_POWER_UP):
+                    sun_club_power_up_total += total
+            
             return {
-                "credits": sun_club_credits,
+                "credits": all_credits,
+                "by_reason_code": credits_by_reason_code,
+                "totals_by_reason_code": {
+                    code: round(total, 2) for code, total in totals_by_reason_code.items()
+                },
                 "totals": {
-                    "sun_club": round(total_sun_club, 2),
-                    "sun_club_power_up": round(total_sun_club_power_up, 2),
+                    "sun_club": round(sun_club_total, 2),  # Backward compatibility
+                    "sun_club_power_up": round(sun_club_power_up_total, 2),  # Backward compatibility
                     "current_month": round(total_current_month, 2),
                     "last_month": round(total_last_month, 2),
                     "total": round(total_all, 2),

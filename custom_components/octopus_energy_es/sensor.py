@@ -147,41 +147,25 @@ BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:calendar-range",
 )
 
-SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="sun_club_total_savings",
-    name="Octopus Energy España SUN CLUB Total Savings",
+ACCOUNT_CREDITS_TOTAL_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="account_credits_total",
+    name="Octopus Energy España Account Credits Total",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
 )
 
-SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="sun_club_current_month_savings",
-    name="Octopus Energy España SUN CLUB Current Month Savings",
+ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="account_credits_current_month",
+    name="Octopus Energy España Account Credits Current Month",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
 )
 
-SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="sun_club_last_month_savings",
-    name="Octopus Energy España SUN CLUB Last Month Savings",
-    native_unit_of_measurement="€",
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
-)
-
-SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="sun_club_regular_savings",
-    name="Octopus Energy España SUN CLUB Regular Savings",
-    native_unit_of_measurement="€",
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
-)
-
-SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="sun_club_power_up_savings",
-    name="Octopus Energy España SUN CLUB Power-Up Savings",
+ACCOUNT_CREDITS_LAST_MONTH_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="account_credits_last_month",
+    name="Octopus Energy España Account Credits Last Month",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -226,20 +210,14 @@ async def async_setup_entry(
         OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
-        OctopusEnergyESSunClubTotalSavingsSensor(
-            coordinator, SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION
+        OctopusEnergyESAccountCreditsTotalSensor(
+            coordinator, ACCOUNT_CREDITS_TOTAL_SENSOR_DESCRIPTION
         ),
-        OctopusEnergyESSunClubCurrentMonthSavingsSensor(
-            coordinator, SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION
+        OctopusEnergyESAccountCreditsCurrentMonthSensor(
+            coordinator, ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION
         ),
-        OctopusEnergyESSunClubLastMonthSavingsSensor(
-            coordinator, SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESSunClubRegularSavingsSensor(
-            coordinator, SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESSunClubPowerUpSavingsSensor(
-            coordinator, SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION
+        OctopusEnergyESAccountCreditsLastMonthSensor(
+            coordinator, ACCOUNT_CREDITS_LAST_MONTH_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
     ]
@@ -972,12 +950,12 @@ class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
         return None
 
 
-class OctopusEnergyESSunClubTotalSavingsSensor(OctopusEnergyESSensor):
-    """SUN CLUB total savings sensor."""
+class OctopusEnergyESAccountCreditsTotalSensor(OctopusEnergyESSensor):
+    """Account credits total sensor."""
 
     @property
     def native_value(self) -> float | None:
-        """Return total SUN CLUB savings."""
+        """Return total account credits."""
         data = self.coordinator.data
         credits = data.get("credits", {})
 
@@ -987,13 +965,35 @@ class OctopusEnergyESSunClubTotalSavingsSensor(OctopusEnergyESSensor):
         totals = credits.get("totals", {})
         return totals.get("total")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes with breakdown by reason code."""
+        attrs: dict[str, Any] = {}
+        data = self.coordinator.data
+        credits = data.get("credits", {})
 
-class OctopusEnergyESSunClubCurrentMonthSavingsSensor(OctopusEnergyESSensor):
-    """SUN CLUB current month savings sensor."""
+        if credits:
+            totals_by_reason_code = credits.get("totals_by_reason_code", {})
+            if totals_by_reason_code:
+                attrs["credits_by_reason_code"] = totals_by_reason_code
+                attrs["reason_codes"] = list(totals_by_reason_code.keys())
+            
+            # Backward compatibility: show SUN_CLUB specific totals if available
+            totals = credits.get("totals", {})
+            if totals.get("sun_club"):
+                attrs["sun_club"] = totals.get("sun_club")
+            if totals.get("sun_club_power_up"):
+                attrs["sun_club_power_up"] = totals.get("sun_club_power_up")
+
+        return attrs
+
+
+class OctopusEnergyESAccountCreditsCurrentMonthSensor(OctopusEnergyESSensor):
+    """Account credits current month sensor."""
 
     @property
     def native_value(self) -> float | None:
-        """Return current month SUN CLUB savings."""
+        """Return current month account credits."""
         data = self.coordinator.data
         credits = data.get("credits", {})
 
@@ -1003,13 +1003,54 @@ class OctopusEnergyESSunClubCurrentMonthSavingsSensor(OctopusEnergyESSensor):
         totals = credits.get("totals", {})
         return totals.get("current_month")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes with breakdown by reason code for current month."""
+        attrs: dict[str, Any] = {}
+        data = self.coordinator.data
+        credits = data.get("credits", {})
 
-class OctopusEnergyESSunClubLastMonthSavingsSensor(OctopusEnergyESSensor):
-    """SUN CLUB last month savings sensor."""
+        if credits:
+            by_reason_code = credits.get("by_reason_code", {})
+            if by_reason_code:
+                # Calculate current month totals by reason code
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                from .const import TIMEZONE_MADRID
+                
+                now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+                current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                
+                current_month_by_reason: dict[str, float] = {}
+                for reason_code, credit_list in by_reason_code.items():
+                    month_total = 0.0
+                    for credit in credit_list:
+                        created_at_str = credit.get("createdAt")
+                        if created_at_str:
+                            try:
+                                created_at = datetime.fromisoformat(
+                                    created_at_str.replace("Z", "+00:00")
+                                ).astimezone(ZoneInfo(TIMEZONE_MADRID))
+                                if created_at >= current_month_start:
+                                    amount = float(credit.get("amount", 0)) / 100
+                                    month_total += amount
+                            except (ValueError, AttributeError):
+                                pass
+                    if month_total > 0:
+                        current_month_by_reason[reason_code] = round(month_total, 2)
+                
+                if current_month_by_reason:
+                    attrs["credits_by_reason_code"] = current_month_by_reason
+
+        return attrs
+
+
+class OctopusEnergyESAccountCreditsLastMonthSensor(OctopusEnergyESSensor):
+    """Account credits last month sensor."""
 
     @property
     def native_value(self) -> float | None:
-        """Return last month SUN CLUB savings."""
+        """Return last month account credits."""
         data = self.coordinator.data
         credits = data.get("credits", {})
 
@@ -1019,37 +1060,48 @@ class OctopusEnergyESSunClubLastMonthSavingsSensor(OctopusEnergyESSensor):
         totals = credits.get("totals", {})
         return totals.get("last_month")
 
-
-class OctopusEnergyESSunClubRegularSavingsSensor(OctopusEnergyESSensor):
-    """SUN CLUB regular savings sensor."""
-
     @property
-    def native_value(self) -> float | None:
-        """Return regular SUN CLUB savings (daylight hours discount)."""
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes with breakdown by reason code for last month."""
+        attrs: dict[str, Any] = {}
         data = self.coordinator.data
         credits = data.get("credits", {})
 
-        if not credits:
-            return None
+        if credits:
+            by_reason_code = credits.get("by_reason_code", {})
+            if by_reason_code:
+                # Calculate last month totals by reason code
+                from datetime import datetime, timedelta
+                from zoneinfo import ZoneInfo
+                from .const import TIMEZONE_MADRID
+                
+                now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+                current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+                last_month_end = current_month_start - timedelta(seconds=1)
+                
+                last_month_by_reason: dict[str, float] = {}
+                for reason_code, credit_list in by_reason_code.items():
+                    month_total = 0.0
+                    for credit in credit_list:
+                        created_at_str = credit.get("createdAt")
+                        if created_at_str:
+                            try:
+                                created_at = datetime.fromisoformat(
+                                    created_at_str.replace("Z", "+00:00")
+                                ).astimezone(ZoneInfo(TIMEZONE_MADRID))
+                                if last_month_start <= created_at <= last_month_end:
+                                    amount = float(credit.get("amount", 0)) / 100
+                                    month_total += amount
+                            except (ValueError, AttributeError):
+                                pass
+                    if month_total > 0:
+                        last_month_by_reason[reason_code] = round(month_total, 2)
+                
+                if last_month_by_reason:
+                    attrs["credits_by_reason_code"] = last_month_by_reason
 
-        totals = credits.get("totals", {})
-        return totals.get("sun_club")
-
-
-class OctopusEnergyESSunClubPowerUpSavingsSensor(OctopusEnergyESSensor):
-    """SUN CLUB power-up savings sensor."""
-
-    @property
-    def native_value(self) -> float | None:
-        """Return SUN CLUB power-up savings."""
-        data = self.coordinator.data
-        credits = data.get("credits", {})
-
-        if not credits:
-            return None
-
-        totals = credits.get("totals", {})
-        return totals.get("sun_club_power_up")
+        return attrs
 
 
 class OctopusEnergyESAccountSensor(OctopusEnergyESSensor):
