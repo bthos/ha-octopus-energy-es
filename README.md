@@ -66,51 +66,8 @@ Choose your Octopus Energy Spain tariff:
 Enter your Octopus Energy Spain account credentials:
 - **Email**: Your Octopus Energy email address
 - **Password**: Your account password
-- **Property ID**: Your property/contract ID (optional - see below for how to find it)
 
-#### How to Find Your Property ID
-
-The Property ID is usually **optional** - the integration will try to auto-detect it after you log in. However, if auto-detection fails, you can find your Property ID using one of these methods:
-
-**Method 1: Octopus Energy Customer Portal**
-1. Log in to your Octopus Energy Spain account at [https://octopusenergy.es](https://octopusenergy.es)
-2. Navigate to your account dashboard or contract details
-3. Look for:
-   - Contract number
-   - Property ID
-   - Account ID
-   - CUPS (Código Universal del Punto de Suministro) - this is your electricity supply point code
-4. The Property ID may be displayed in the URL when viewing your contract (e.g., `/contracts/12345` where `12345` is the ID)
-
-**Method 2: Octopus Energy Mobile App**
-1. Open the Octopus Energy mobile app
-2. Go to your account or contract section
-3. Look for contract details or property information
-4. The Property ID should be listed there
-
-**Method 3: Octopus Energy Invoice**
-1. Check your Octopus Energy invoice (PDF or email)
-2. Look for:
-   - Contract number
-   - Account number
-   - Property reference
-   - CUPS code
-
-**Method 4: Browser Developer Tools (Advanced)**
-1. Log in to the Octopus Energy website
-2. Open browser developer tools (F12)
-3. Go to the Network tab
-4. Navigate to your account/contract page
-5. Look for API calls that contain property/contract IDs in the response
-
-**Note**: The Property ID format may vary. It could be:
-- A numeric ID (e.g., `12345`)
-- A UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`)
-- Your CUPS code (20 characters, e.g., `ES1234567890123456ABC`)
-
-If you're unsure, try leaving it empty first - the integration will attempt to auto-detect it. If that fails, you'll be prompted to enter it manually.
-
-**For detailed step-by-step instructions with screenshots, see [HOW_TO_FIND_PROPERTY_ID.md](HOW_TO_FIND_PROPERTY_ID.md)**
+**Note**: Your account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use in the next step.
 
 ### Step 3: Tariff-Specific Configuration
 
@@ -240,7 +197,7 @@ entity: sensor.octopus_energy_es_price
 ### Consumption Data Not Available
 
 - Verify your Octopus Energy credentials are correct
-- Check that your property ID is correct (see [How to Find Property ID](HOW_TO_FIND_PROPERTY_ID.md))
+- Check that your account number was detected correctly (see [Troubleshooting Account Auto-Detection](TROUBLESHOOTING_ACCOUNT_DETECTION.md))
 - Ensure your account has consumption data available
 - Consumption data may take some time to appear after initial setup
 

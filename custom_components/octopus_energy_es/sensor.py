@@ -124,6 +124,46 @@ BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:calendar-range",
 )
 
+SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="sun_club_total_savings",
+    name="Octopus Energy ES SUN CLUB Total Savings",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
+SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="sun_club_current_month_savings",
+    name="Octopus Energy ES SUN CLUB Current Month Savings",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
+SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="sun_club_last_month_savings",
+    name="Octopus Energy ES SUN CLUB Last Month Savings",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
+SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="sun_club_regular_savings",
+    name="Octopus Energy ES SUN CLUB Regular Savings",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
+SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="sun_club_power_up_savings",
+    name="Octopus Energy ES SUN CLUB Power-Up Savings",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:currency-eur",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -153,6 +193,21 @@ async def async_setup_entry(
         OctopusEnergyESMonthlyBillSensor(coordinator, MONTHLY_BILL_SENSOR_DESCRIPTION),
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
+        OctopusEnergyESSunClubTotalSavingsSensor(
+            coordinator, SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESSunClubCurrentMonthSavingsSensor(
+            coordinator, SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESSunClubLastMonthSavingsSensor(
+            coordinator, SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESSunClubRegularSavingsSensor(
+            coordinator, SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESSunClubPowerUpSavingsSensor(
+            coordinator, SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION
+        ),
     ]
 
     async_add_entities(entities)
@@ -467,11 +522,20 @@ class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
         if not billing:
             return None
 
+        last_invoice = billing.get("last_invoice")
+        if isinstance(last_invoice, dict):
+            amount = last_invoice.get("amount")
+            if amount is not None:
+                # Amount might be in cents, convert to euros
+                return float(amount) / 100 if amount > 1000 else float(amount)
+            return None
+
+        # Fallback for old format
         invoices = billing.get("invoices", [])
         if invoices and len(invoices) > 0:
             return invoices[0].get("amount")
 
-        return billing.get("last_invoice")
+        return None
 
 
 class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
@@ -479,18 +543,102 @@ class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
 
     @property
     def native_value(self) -> str | None:
-        """Return billing period."""
+        """Return billing period as string."""
         data = self.coordinator.data
         billing = data.get("billing", {})
 
         if not billing:
             return None
 
-        start_date = billing.get("period_start")
-        end_date = billing.get("period_end")
+        last_invoice = billing.get("last_invoice")
+        if not last_invoice:
+            return None
 
-        if start_date and end_date:
-            return f"{start_date} - {end_date}"
+        start = last_invoice.get("start")
+        end = last_invoice.get("end")
+
+        if start and end:
+            return f"{start} to {end}"
 
         return None
+
+
+class OctopusEnergyESSunClubTotalSavingsSensor(OctopusEnergyESSensor):
+    """SUN CLUB total savings sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return total SUN CLUB savings."""
+        data = self.coordinator.data
+        credits = data.get("credits", {})
+
+        if not credits:
+            return None
+
+        totals = credits.get("totals", {})
+        return totals.get("total")
+
+
+class OctopusEnergyESSunClubCurrentMonthSavingsSensor(OctopusEnergyESSensor):
+    """SUN CLUB current month savings sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current month SUN CLUB savings."""
+        data = self.coordinator.data
+        credits = data.get("credits", {})
+
+        if not credits:
+            return None
+
+        totals = credits.get("totals", {})
+        return totals.get("current_month")
+
+
+class OctopusEnergyESSunClubLastMonthSavingsSensor(OctopusEnergyESSensor):
+    """SUN CLUB last month savings sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return last month SUN CLUB savings."""
+        data = self.coordinator.data
+        credits = data.get("credits", {})
+
+        if not credits:
+            return None
+
+        totals = credits.get("totals", {})
+        return totals.get("last_month")
+
+
+class OctopusEnergyESSunClubRegularSavingsSensor(OctopusEnergyESSensor):
+    """SUN CLUB regular savings sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return regular SUN CLUB savings (daylight hours discount)."""
+        data = self.coordinator.data
+        credits = data.get("credits", {})
+
+        if not credits:
+            return None
+
+        totals = credits.get("totals", {})
+        return totals.get("sun_club")
+
+
+class OctopusEnergyESSunClubPowerUpSavingsSensor(OctopusEnergyESSensor):
+    """SUN CLUB power-up savings sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return SUN CLUB power-up savings."""
+        data = self.coordinator.data
+        credits = data.get("credits", {})
+
+        if not credits:
+            return None
+
+        totals = credits.get("totals", {})
+        return totals.get("sun_club_power_up")
 

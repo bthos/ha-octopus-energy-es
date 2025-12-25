@@ -122,9 +122,6 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         # or the API might become available
                         self._data[CONF_EMAIL] = email
                         self._data[CONF_PASSWORD] = password
-                        # Property ID is not needed if API doesn't exist
-                        if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
-                            self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
                         await test_client.close()
                         return await self.async_step_tariff_config()
                     else:
@@ -152,15 +149,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         # Multiple accounts - show selection step
                         return await self.async_step_select_property()
                 else:
-                    # Couldn't fetch properties - ask user to enter property_id manually
-                    if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
-                        # User provided property_id, store it
-                        # We'll validate it when coordinator tries to fetch data
-                        self._data.update(user_input)
-                        return await self.async_step_tariff_config()
-                    else:
-                        # No property_id provided and couldn't fetch list
-                        errors["base"] = "property_id_required"
+                    # Couldn't fetch accounts - this is an error
+                    # Account should always be available after successful authentication
+                    _LOGGER.error("Authentication succeeded but no accounts found. This may indicate an account access issue.")
+                    # Store credentials and show manual entry as fallback
+                    self._data[CONF_EMAIL] = email
+                    self._data[CONF_PASSWORD] = password
+                    return await self.async_step_manual_account()
                 
             except OctopusClientError as err:
                 error_msg = str(err).lower()
@@ -182,15 +177,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if user_input.get(CONF_EMAIL) and user_input.get(CONF_PASSWORD):
                         self._data[CONF_EMAIL] = user_input[CONF_EMAIL]
                         self._data[CONF_PASSWORD] = user_input[CONF_PASSWORD]
-                        if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
-                            self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
                     return await self.async_step_tariff_config()
                 
-                # Other authentication errors
+                # Other authentication errors - provide user-friendly messages
                 _LOGGER.error("Error validating credentials: %s", err)
-                if "401" in error_msg or "invalid" in error_msg:
+                if "401" in error_msg or "invalid" in error_msg or "credentials" in error_msg:
                     errors["base"] = "invalid_auth"
-                elif "cannot_connect" in error_msg or "connection" in error_msg or "network" in error_msg:
+                elif "cannot_connect" in error_msg or "connection" in error_msg or "network" in error_msg or "timeout" in error_msg:
                     errors["base"] = "cannot_connect"
                 else:
                     errors["base"] = "unknown"
@@ -204,9 +197,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     step_id="octopus_credentials",
                     data_schema=vol.Schema(
                         {
-                            vol.Required(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
-                            vol.Required(CONF_PASSWORD): str,
-                            vol.Optional(CONF_PROPERTY_ID, default=user_input.get(CONF_PROPERTY_ID, "")): str,
+                            vol.Optional(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
+                            vol.Optional(CONF_PASSWORD): str,
                         }
                     ),
                     errors=errors,
@@ -216,9 +208,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="octopus_credentials",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_EMAIL, description={"suggested_value": "Leave empty to skip (price data only)"}): str,
-                    vol.Optional(CONF_PASSWORD, description={"suggested_value": "Leave empty to skip (price data only)"}): str,
-                    vol.Optional(CONF_PROPERTY_ID, description={"suggested_value": "Leave empty to auto-detect"}): str,
+                    vol.Optional(CONF_EMAIL): str,
+                    vol.Optional(CONF_PASSWORD): str,
                 }
             ),
             errors=errors,
@@ -247,6 +238,30 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_PROPERTY_ID): vol.In(property_options),
                 }
             ),
+        )
+
+    async def async_step_manual_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle manual account entry as fallback when auto-detection fails."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            account_number = user_input.get(CONF_PROPERTY_ID, "").strip()
+            if account_number:
+                self._data[CONF_PROPERTY_ID] = account_number
+                return await self.async_step_tariff_config()
+            else:
+                errors["base"] = "account_number_required"
+
+        return self.async_show_form(
+            step_id="manual_account",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PROPERTY_ID): str,
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_tariff_config(

@@ -75,6 +75,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._tomorrow_prices: list[dict[str, Any]] = []
         self._consumption_data: list[dict[str, Any]] = []
         self._billing_data: dict[str, Any] = {}
+        self._credits_data: dict[str, Any] = {}
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
@@ -157,12 +158,29 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Error updating billing: %s", err)
                 # Billing is optional, don't fail
 
+        # Update credits data (daily)
+        if self._octopus_client:
+            try:
+                self._credits_data = await self._octopus_client.fetch_account_credits()
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                if "not available" in error_msg or "not be publicly" in error_msg:
+                    _LOGGER.info(
+                        "Octopus Energy Spain API is not available. "
+                        "Credits data will not be available. "
+                        "Price sensors will continue to work using market data."
+                    )
+                else:
+                    _LOGGER.debug("Error updating credits: %s", err)
+                # Credits are optional, don't fail
+
         # Always return a dict, even if empty, so sensors don't fail
         result = {
             "today_prices": self._today_prices or [],
             "tomorrow_prices": self._tomorrow_prices or [],
             "consumption": self._consumption_data or [],
             "billing": self._billing_data or {},
+            "credits": self._credits_data or {},
         }
         
         _LOGGER.debug(
