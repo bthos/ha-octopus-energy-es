@@ -41,11 +41,11 @@
           "solar_surplus_rate": "Solar Surplus Compensation (€/kWh)"
         }
       },
-      "esios_token": {
-        "title": "ESIOS API Token (Optional)",
-        "description": "Enter your ESIOS API token for direct market data access. Leave empty to use public data.",
+      "pvpc_sensor": {
+        "title": "PVPC Price Sensor",
+        "description": "Select the PVPC Hourly Pricing sensor to use for market price data.\n\nMake sure you have the PVPC Hourly Pricing integration configured. The default sensor is 'sensor.pvpc'.",
         "data": {
-          "esios_token": "ESIOS API Token"
+          "pvpc_sensor": "PVPC Sensor Entity ID"
         }
       },
       "options": {

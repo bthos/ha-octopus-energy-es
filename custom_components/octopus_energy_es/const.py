@@ -8,7 +8,7 @@ DOMAIN = "octopus_energy_es"
 # Configuration keys
 CONF_TARIFF_TYPE = "tariff_type"
 CONF_PROPERTY_ID = "property_id"
-CONF_ESIOS_TOKEN = "esios_token"
+CONF_PVPC_SENSOR = "pvpc_sensor"
 CONF_FIXED_RATE = "fixed_rate"
 CONF_P1_RATE = "p1_rate"
 CONF_P2_RATE = "p2_rate"

@@ -249,9 +249,9 @@ class OctopusClient:
                                         endAt
                                         value
                                         unit
-                                        utilityType
-                                        readingDirection
                                     }
+                                    utilityType
+                                    readingDirection
                                 }
                             }
                         }

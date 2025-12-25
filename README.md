@@ -25,14 +25,24 @@ Home Assistant custom component for Octopus Energy Spain, providing electricity 
   - Billing period tracking
 
 - **Data Sources**:
-  - Primary: ESIOS API (Red Eléctrica de España) for PVPC prices
+  - Primary: PVPC Hourly Pricing integration ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices
   - Fallback: OMIE API for wholesale market prices
   - Octopus Energy API for consumption and billing data (if available)
   - Web scraping fallback for fixed tariff rates
 
-**Note**: Octopus Energy Spain uses a GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`. The integration connects to this API for billing and account data. Price data uses market sources (ESIOS/OMIE) which work independently.
+**Note**: 
+- Octopus Energy Spain uses a GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`. The integration connects to this API for billing and account data.
+- **This integration requires the [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) to be configured first.** The PVPC integration provides market price data that this integration uses to calculate tariff-specific prices.
 
 ## Installation
+
+### Prerequisites
+
+**This integration requires the [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) to be configured first.**
+
+1. Go to Settings → Devices & Services → Add Integration
+2. Search for "Spain electricity hourly pricing (PVPC)" and configure it
+3. Note the sensor entity ID (default is `sensor.pvpc`)
 
 ### HACS (Recommended)
 
@@ -100,14 +110,13 @@ Periods are similar to Solar but optimized for EV charging.
 - **Daylight End**: End hour for daylight discount (default: 18)
 - **Discount Percentage**: Discount percentage (default: 0.45 = 45%)
 
-### Step 4: ESIOS API Token (Optional)
+### Step 4: PVPC Sensor Selection
 
-The ESIOS API token is optional but recommended for direct access to market data:
-1. Send an email to `consultasios@ree.es` requesting an API token
-2. Include your use case and intended usage
-3. Once received, enter the token in the configuration
+Select the PVPC Hourly Pricing sensor to use for market price data:
+- **Default**: `sensor.pvpc` (if you haven't changed the sensor name)
+- **Custom**: Enter your custom PVPC sensor entity ID if you renamed it
 
-If no token is provided, the integration will attempt to use public data sources.
+The integration will read price data from this sensor and calculate tariff-specific prices based on your selected tariff type.
 
 ## Sensors
 
@@ -166,7 +175,9 @@ The sensor provides data in the required format:
 
 ### Prices Not Updating
 
-- Check that your ESIOS API token is valid (if using)
+- Ensure the PVPC Hourly Pricing integration is configured and working
+- Verify the PVPC sensor entity ID is correct (default: `sensor.pvpc`)
+- Check that the PVPC sensor has price data available
 - Verify your internet connection
 - Check Home Assistant logs for API errors
 - Spanish market publishes tomorrow's prices at 14:00 CET - prices may not be available before that time
@@ -190,9 +201,13 @@ The sensor provides data in the required format:
 - The integration will attempt to scrape rates from the Octopus Energy website as a fallback
 - If scraping fails, manual entry is required
 
+## Dependencies
+
+- **PVPC Hourly Pricing Integration**: Required for market price data. See [installation instructions](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/).
+
 ## API Rate Limits
 
-- ESIOS API: Respect rate limits - the integration includes caching to minimize requests
+- PVPC Integration: Uses the official PVPC integration which handles rate limits
 - Octopus Energy API: Standard rate limits apply
 - Web scraping: Limited to avoid overloading servers (cached for 1 week)
 
@@ -205,7 +220,7 @@ All timestamps are handled in Europe/Madrid timezone (CET/CEST) with automatic D
 The integration includes robust error handling:
 - Automatic retry logic for API failures
 - Fallback to cached data when APIs are unavailable
-- Fallback from ESIOS to OMIE for market prices
+- Fallback from PVPC sensor to OMIE API for market prices
 - Graceful degradation if optional features (consumption, billing) are unavailable
 
 ## Support
@@ -221,4 +236,4 @@ This project is licensed under the MIT License.
 ## Acknowledgments
 
 - Based on the Spanish electricity market integration plan
-- Uses ESIOS API from Red Eléctrica de España for market data
+- Uses [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) for market data from Red Eléctrica de España

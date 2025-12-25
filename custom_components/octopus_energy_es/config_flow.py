@@ -11,7 +11,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    CONF_ESIOS_TOKEN,
+    CONF_PVPC_SENSOR,
     CONF_PROPERTY_ID,
     CONF_TARIFF_TYPE,
     DEFAULT_P1_HOURS,
@@ -287,13 +287,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_esios_token()
+            return await self.async_step_pvpc_sensor()
 
         tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE)
 
         if tariff_type == TARIFF_TYPE_FLEXI:
             # No configuration needed for Flexi
-            return await self.async_step_esios_token()
+            return await self.async_step_pvpc_sensor()
 
         schema_dict: dict[str, Any] = {}
 
@@ -330,13 +330,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_esios_token(
+    async def async_step_pvpc_sensor(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle ESIOS API token (optional)."""
+        """Handle PVPC sensor selection."""
         if user_input is not None:
-            if token := user_input.get(CONF_ESIOS_TOKEN):
-                self._data[CONF_ESIOS_TOKEN] = token
+            pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
+            self._data[CONF_PVPC_SENSOR] = pvpc_sensor
             
             # Get tariff type for title
             tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
@@ -348,10 +348,10 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         return self.async_show_form(
-            step_id="esios_token",
+            step_id="pvpc_sensor",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_ESIOS_TOKEN): str,
+                    vol.Optional(CONF_PVPC_SENSOR, default="sensor.pvpc"): str,
                 }
             ),
         )

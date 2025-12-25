@@ -11,13 +11,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from zoneinfo import ZoneInfo
 
-from .api.esios_client import ESIOSClient, ESIOSClientError
 from .api.omie_client import OMIEClient
 from .api.octopus_client import OctopusClient, OctopusClientError
 from .api.tariff_scraper import TariffScraper, TariffScraperError
 from .const import (
-    CONF_ESIOS_TOKEN,
     CONF_PROPERTY_ID,
+    CONF_PVPC_SENSOR,
     DOMAIN,
     MARKET_PUBLISH_HOUR,
     TIMEZONE_MADRID,
@@ -45,11 +44,11 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         )
 
         self._entry = entry
+        self._hass = hass
         self._timezone = ZoneInfo(TIMEZONE_MADRID)
 
-        # Initialize API clients
-        esios_token = entry.data.get(CONF_ESIOS_TOKEN)
-        self._esios_client = ESIOSClient(token=esios_token)
+        # PVPC sensor entity ID (default to sensor.pvpc)
+        self._pvpc_sensor = entry.data.get(CONF_PVPC_SENSOR, "sensor.pvpc")
 
         self._omie_client = OMIEClient()
 
@@ -194,16 +193,51 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
     async def _fetch_and_calculate_prices(
         self, target_date: date | None = None
     ) -> list[dict[str, Any]]:
-        """Fetch market prices and calculate tariff prices."""
+        """Fetch market prices from PVPC sensor and calculate tariff prices."""
         market_prices: list[dict[str, Any]] = []
 
-        # Try ESIOS first
+        # Try PVPC sensor first
         try:
-            _LOGGER.debug("Fetching prices from ESIOS for date: %s", target_date)
-            market_prices = await self._esios_client.fetch_pvpc_prices(target_date)
-            _LOGGER.debug("ESIOS returned %d price points", len(market_prices))
-        except ESIOSClientError as err:
-            _LOGGER.warning("ESIOS API error: %s", err)
+            _LOGGER.debug("Fetching prices from PVPC sensor: %s", self._pvpc_sensor)
+            pvpc_state = self._hass.states.get(self._pvpc_sensor)
+            
+            if pvpc_state is None:
+                raise ValueError(f"PVPC sensor '{self._pvpc_sensor}' not found. Please ensure the PVPC Hourly Pricing integration is configured.")
+            
+            # Get price data from sensor attributes
+            # PVPC sensor has 'data' attribute with hourly prices
+            price_data = pvpc_state.attributes.get("data", [])
+            
+            if not price_data:
+                _LOGGER.warning("PVPC sensor has no price data")
+                raise ValueError("PVPC sensor has no price data")
+            
+            # Convert PVPC sensor format to our format
+            # PVPC format: [{"start": "2025-01-15T00:00:00+01:00", "price": 0.12345}, ...]
+            for item in price_data:
+                if isinstance(item, dict):
+                    start_time = item.get("start") or item.get("start_time")
+                    price = item.get("price") or item.get("price_per_kwh")
+                    
+                    if start_time and price is not None:
+                        # Check if this price is for the target date
+                        if target_date:
+                            try:
+                                price_datetime = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                                if price_datetime.date() != target_date:
+                                    continue
+                            except (ValueError, AttributeError):
+                                continue
+                        
+                        market_prices.append({
+                            "start_time": start_time,
+                            "price_per_kwh": float(price),
+                        })
+            
+            _LOGGER.debug("PVPC sensor returned %d price points", len(market_prices))
+            
+        except Exception as pvpc_err:
+            _LOGGER.warning("PVPC sensor error: %s", pvpc_err)
             # Try OMIE as fallback
             try:
                 _LOGGER.debug("Trying OMIE as fallback")
@@ -225,7 +259,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         if not market_prices:
             # No prices available yet (e.g., tomorrow before 14:00)
-            _LOGGER.warning("No market prices returned from APIs for %s", target_date)
+            _LOGGER.warning("No market prices returned for %s", target_date)
             return []
 
         # Calculate prices based on tariff type
@@ -242,7 +276,6 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and close clients."""
-        await self._esios_client.close()
         await self._omie_client.close()
         if self._octopus_client:
             await self._octopus_client.close()
