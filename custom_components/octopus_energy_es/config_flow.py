@@ -14,8 +14,10 @@ from .const import (
     CONF_DISCOUNT_END_HOUR,
     CONF_DISCOUNT_PERCENTAGE,
     CONF_DISCOUNT_START_HOUR,
+    CONF_ELECTRICITY_TAX_RATE,
     CONF_FIXED_RATE,
     CONF_MANAGEMENT_FEE_MONTHLY,
+    CONF_OTHER_CONCEPTS_RATE,
     CONF_P1_HOURS_WEEKDAYS,
     CONF_P1_RATE,
     CONF_P2_HOURS_WEEKDAYS,
@@ -29,9 +31,12 @@ from .const import (
     CONF_PROPERTY_ID,
     CONF_SOLAR_SURPLUS_RATE,
     CONF_TIME_STRUCTURE,
+    CONF_VAT_RATE,
+    DEFAULT_ELECTRICITY_TAX_RATE,
     DEFAULT_P1_HOURS_WEEKDAYS,
     DEFAULT_P2_HOURS_WEEKDAYS,
     DEFAULT_P3_HOURS_WEEKDAYS,
+    DEFAULT_VAT_RATE,
     DOMAIN,
     PRICING_MODEL_FIXED,
     PRICING_MODEL_MARKET,
@@ -389,14 +394,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_DISCOUNT_START_HOUR] = user_input.get(CONF_DISCOUNT_START_HOUR)
                 self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
                 self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
-            
-            # Check if we need PVPC sensor (only for market pricing)
-            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-            if pricing_model == PRICING_MODEL_MARKET:
-                return await self.async_step_pvpc_sensor()
-            else:
-                # Fixed pricing - skip PVPC sensor and create entry
-                return self._create_entry()
+            return await self.async_step_other_concepts()
 
         return self.async_show_form(
             step_id="discount_programs",
@@ -410,6 +408,55 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         vol.Coerce(int), vol.Range(min=0, max=23)
                     ),
                     vol.Optional(CONF_DISCOUNT_PERCENTAGE, default=0.45): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_other_concepts(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle other concepts configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_other_concepts"):
+                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.0)
+            return await self.async_step_taxes()
+
+        return self.async_show_form(
+            step_id="other_concepts",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_other_concepts", default=False): bool,
+                    vol.Optional(CONF_OTHER_CONCEPTS_RATE, default=0.0): vol.Coerce(float),
+                }
+            ),
+        )
+
+    async def async_step_taxes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle taxes configuration."""
+        if user_input is not None:
+            self._data[CONF_ELECTRICITY_TAX_RATE] = user_input.get(CONF_ELECTRICITY_TAX_RATE, DEFAULT_ELECTRICITY_TAX_RATE)
+            self._data[CONF_VAT_RATE] = user_input.get(CONF_VAT_RATE, DEFAULT_VAT_RATE)
+            
+            # Check if we need PVPC sensor (only for market pricing)
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            if pricing_model == PRICING_MODEL_MARKET:
+                return await self.async_step_pvpc_sensor()
+            else:
+                # Fixed pricing - skip PVPC sensor and create entry
+                return self._create_entry()
+
+        return self.async_show_form(
+            step_id="taxes",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_ELECTRICITY_TAX_RATE, default=DEFAULT_ELECTRICITY_TAX_RATE): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                    vol.Optional(CONF_VAT_RATE, default=DEFAULT_VAT_RATE): vol.All(
                         vol.Coerce(float), vol.Range(min=0, max=1)
                     ),
                 }

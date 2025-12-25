@@ -252,3 +252,70 @@ class TariffCalculator:
             "p2_cost": round(p2_cost, 6),
             "total_cost": round(total_cost, 6),
         }
+
+    def calculate_daily_cost(
+        self,
+        energy_cost: float,
+        power_cost: float | None = None,
+        management_fee_daily: float | None = None,
+        target_date: date | None = None,
+    ) -> dict[str, float]:
+        """
+        Calculate total daily cost including taxes and other concepts.
+        
+        Calculation order:
+        1. Base = energy_cost + power_cost + management_fee_daily + other_concepts
+        2. Impuesto Eléctrico = base * electricity_tax_rate
+        3. IVA = (base + Impuesto Eléctrico) * vat_rate
+        4. Final Cost = base + Impuesto Eléctrico + IVA
+        
+        Args:
+            energy_cost: Energy consumption cost (€)
+            power_cost: Power cost (€/day), optional
+            management_fee_daily: Daily management fee (€/day), optional
+            target_date: Target date for calculation
+            
+        Returns:
+            Dictionary with cost breakdown:
+            - 'base': Base cost before taxes
+            - 'other_concepts': Other concepts cost (Bono Social + Equipment Rental)
+            - 'electricity_tax': Impuesto Eléctrico amount
+            - 'vat': IVA amount
+            - 'total': Final total cost
+        """
+        if target_date is None:
+            target_date = datetime.now(self._timezone).date()
+        
+        # Step 1: Calculate base cost
+        base_cost = energy_cost
+        
+        if power_cost is not None:
+            base_cost += power_cost
+        
+        if management_fee_daily is not None:
+            base_cost += management_fee_daily
+        
+        # Add other concepts (Otros conceptos)
+        other_concepts_cost = 0.0
+        if self._config.other_concepts_rate is not None:
+            other_concepts_cost = self._config.other_concepts_rate
+        
+        base_cost += other_concepts_cost
+        
+        # Step 2: Calculate Impuesto Eléctrico
+        electricity_tax = base_cost * self._config.electricity_tax_rate
+        
+        # Step 3: Calculate IVA (on base + Impuesto Eléctrico)
+        vat_base = base_cost + electricity_tax
+        vat = vat_base * self._config.vat_rate
+        
+        # Step 4: Final cost
+        total_cost = base_cost + electricity_tax + vat
+        
+        return {
+            "base": round(base_cost - other_concepts_cost, 6),  # Base without other concepts
+            "other_concepts": round(other_concepts_cost, 6),
+            "electricity_tax": round(electricity_tax, 6),
+            "vat": round(vat, 6),
+            "total": round(total_cost, 2),
+        }

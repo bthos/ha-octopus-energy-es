@@ -24,6 +24,17 @@ CONF_DISCOUNT_START_HOUR = "discount_start_hour"
 CONF_DISCOUNT_END_HOUR = "discount_end_hour"
 CONF_DISCOUNT_PERCENTAGE = "discount_percentage"
 
+# Other concepts (Otros conceptos)
+CONF_OTHER_CONCEPTS_RATE = "other_concepts_rate"  # €/day
+
+# Taxes (Impuestos)
+CONF_ELECTRICITY_TAX_RATE = "electricity_tax_rate"  # Percentage (0.0511 = 5.11%)
+CONF_VAT_RATE = "vat_rate"  # Percentage (0.21 = 21.00%)
+
+# Default tax rates
+DEFAULT_ELECTRICITY_TAX_RATE = 0.0511  # 5.11%
+DEFAULT_VAT_RATE = 0.21  # 21.00%
+
 # Period hours configuration (for customization)
 CONF_P1_HOURS_WEEKDAYS = "p1_hours_weekdays"
 CONF_P2_HOURS_WEEKDAYS = "p2_hours_weekdays"

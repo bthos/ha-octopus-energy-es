@@ -5,11 +5,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..const import (
-    CONF_DISCOUNT_START_HOUR,
     CONF_DISCOUNT_END_HOUR,
     CONF_DISCOUNT_PERCENTAGE,
+    CONF_DISCOUNT_START_HOUR,
+    CONF_ELECTRICITY_TAX_RATE,
     CONF_FIXED_RATE,
     CONF_MANAGEMENT_FEE_MONTHLY,
+    CONF_OTHER_CONCEPTS_RATE,
     CONF_P1_HOURS_WEEKDAYS,
     CONF_P1_RATE,
     CONF_P2_HOURS_WEEKDAYS,
@@ -21,9 +23,12 @@ from ..const import (
     CONF_PRICING_MODEL,
     CONF_SOLAR_SURPLUS_RATE,
     CONF_TIME_STRUCTURE,
+    CONF_VAT_RATE,
+    DEFAULT_ELECTRICITY_TAX_RATE,
     DEFAULT_P1_HOURS_WEEKDAYS,
     DEFAULT_P2_HOURS_WEEKDAYS,
     DEFAULT_P3_HOURS_WEEKDAYS,
+    DEFAULT_VAT_RATE,
     PRICING_MODEL_FIXED,
     PRICING_MODEL_MARKET,
     TIME_STRUCTURE_SINGLE_RATE,
@@ -66,6 +71,13 @@ class TariffConfig:
     discount_start_hour: int | None = None  # 0-23
     discount_end_hour: int | None = None  # 0-23
     discount_percentage: float | None = None  # 0-1 (0-100%)
+
+    # Other Concepts (Otros conceptos)
+    other_concepts_rate: float | None = None  # €/day
+
+    # Taxes (Impuestos)
+    electricity_tax_rate: float = DEFAULT_ELECTRICITY_TAX_RATE  # Percentage (0.0511 = 5.11%)
+    vat_rate: float = DEFAULT_VAT_RATE  # Percentage (0.21 = 21.00%)
 
     def __post_init__(self) -> None:
         """Validate configuration."""
@@ -124,4 +136,7 @@ def create_tariff_config(config_data: dict[str, Any]) -> TariffConfig:
         discount_start_hour=config_data.get(CONF_DISCOUNT_START_HOUR),
         discount_end_hour=config_data.get(CONF_DISCOUNT_END_HOUR),
         discount_percentage=config_data.get(CONF_DISCOUNT_PERCENTAGE),
+        other_concepts_rate=config_data.get(CONF_OTHER_CONCEPTS_RATE),
+        electricity_tax_rate=config_data.get(CONF_ELECTRICITY_TAX_RATE, DEFAULT_ELECTRICITY_TAX_RATE),
+        vat_rate=config_data.get(CONF_VAT_RATE, DEFAULT_VAT_RATE),
     )

@@ -24,6 +24,7 @@ from .const import (
     CONF_DISCOUNT_END_HOUR,
     CONF_DISCOUNT_PERCENTAGE,
     CONF_DISCOUNT_START_HOUR,
+    CONF_MANAGEMENT_FEE_MONTHLY,
     DOMAIN,
     TIMEZONE_MADRID,
 )
@@ -828,6 +829,7 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         self._cost_date: date | None = None
         self._is_today: bool = False
         self._data_available_until: date | None = None
+        self._cost_breakdown: dict[str, float] | None = None
 
     @property
     def native_value(self) -> float | None:
@@ -876,9 +878,9 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         self._cost_date = target_date
         self._is_today = (target_date == today)
 
-        # Calculate cost for the target date
+        # Calculate energy cost for the target date
         # Match hourly consumption with hourly prices for accurate cost calculation
-        total_cost = 0.0
+        energy_cost = 0.0
         
         # Group consumption by hour for the target date
         hourly_consumption: dict[int, float] = {}
@@ -900,7 +902,7 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
             for price in prices:
                 price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
                 if price_dt_madrid and price_dt_madrid.date() == target_date and price_dt_madrid.hour == hour:
-                    total_cost += consumption_value * price.get("price_per_kwh", 0)
+                    energy_cost += consumption_value * price.get("price_per_kwh", 0)
                     matched_hours += 1
                     break
 
@@ -918,15 +920,43 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
 
             if not daily_prices:
                 # If no hourly prices for target date, return None
+                self._cost_breakdown = None
                 return None
 
             # Calculate average price for the day
             avg_price = sum(daily_prices) / len(daily_prices)
             
-            # Calculate total cost
-            total_cost = daily_consumption * avg_price
+            # Calculate energy cost
+            energy_cost = daily_consumption * avg_price
 
-        return round(total_cost, 2) if total_cost >= 0 else None
+        # Calculate power cost (if power rates are configured)
+        # Note: Power value should be provided by user if not available via API
+        power_cost = None
+        entry = self.coordinator._entry
+        power_kw = entry.data.get("power_kw")  # User-provided power value
+        if power_kw is not None:
+            tariff_calculator = self.coordinator._tariff_calculator
+            power_cost_dict = tariff_calculator.calculate_power_cost(float(power_kw), target_date)
+            power_cost = power_cost_dict.get("total_cost", 0.0)
+
+        # Calculate management fee daily (convert monthly to daily)
+        management_fee_daily = None
+        management_fee_monthly = entry.data.get(CONF_MANAGEMENT_FEE_MONTHLY)
+        if management_fee_monthly is not None:
+            # Approximate: monthly fee / average days per month
+            management_fee_daily = float(management_fee_monthly) / 30.0
+
+        # Calculate total cost with taxes and other concepts
+        tariff_calculator = self.coordinator._tariff_calculator
+        cost_breakdown = tariff_calculator.calculate_daily_cost(
+            energy_cost=energy_cost,
+            power_cost=power_cost,
+            management_fee_daily=management_fee_daily,
+            target_date=target_date,
+        )
+        
+        self._cost_breakdown = cost_breakdown
+        return cost_breakdown.get("total")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -939,6 +969,14 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         
         if self._data_available_until:
             attrs["data_available_until"] = self._data_available_until.isoformat()
+        
+        # Add cost breakdown if available
+        if self._cost_breakdown:
+            attrs["base_cost"] = round(self._cost_breakdown.get("base", 0), 2)
+            attrs["other_concepts_cost"] = round(self._cost_breakdown.get("other_concepts", 0), 2)
+            attrs["electricity_tax"] = round(self._cost_breakdown.get("electricity_tax", 0), 2)
+            attrs["vat"] = round(self._cost_breakdown.get("vat", 0), 2)
+            attrs["total_cost"] = round(self._cost_breakdown.get("total", 0), 2)
         
         return attrs
 
@@ -1127,23 +1165,6 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
                                     break
 
         return round(total_estimated_credits, 2) if total_estimated_credits > 0 else None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs: dict[str, Any] = {}
-        entry = self.coordinator._entry
-        
-        discount_start_hour = entry.data.get(CONF_DISCOUNT_START_HOUR)
-        discount_end_hour = entry.data.get(CONF_DISCOUNT_END_HOUR)
-        discount_percentage = entry.data.get(CONF_DISCOUNT_PERCENTAGE)
-        
-        if discount_start_hour is not None and discount_end_hour is not None:
-            attrs["discount_hours"] = f"{discount_start_hour:02d}:00 - {discount_end_hour:02d}:00"
-        if discount_percentage is not None:
-            attrs["discount_percentage"] = f"{discount_percentage * 100:.0f}%"
-        
-        return attrs
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
