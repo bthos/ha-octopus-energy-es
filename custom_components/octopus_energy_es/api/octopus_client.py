@@ -238,11 +238,22 @@ class OctopusClient:
                     "Property-based consumption query failed, falling back to account-based query: %s",
                     err
                 )
-                return await self._fetch_consumption_via_account(
-                    start_date=start_date,
-                    end_date=end_date,
-                    granularity=granularity,
-                )
+                try:
+                    return await self._fetch_consumption_via_account(
+                        start_date=start_date,
+                        end_date=end_date,
+                        granularity=granularity,
+                    )
+                except Exception as account_err:
+                    _LOGGER.error(
+                        "Both property-based and account-based consumption queries failed. "
+                        "Property query error: %s. Account query error: %s",
+                        err,
+                        account_err
+                    )
+                    raise OctopusClientError(
+                        f"Failed to fetch consumption data: {account_err}"
+                    ) from account_err
         
         # Fallback: account-based query
         return await self._fetch_consumption_via_account(
@@ -283,7 +294,6 @@ class OctopusClient:
                 $first: Int!
                 $startAt: DateTime
                 $endAt: DateTime
-                $timezone: String
                 $after: String
             ) {
                 property(id: $propertyId) {
@@ -291,15 +301,16 @@ class OctopusClient:
                         first: $first
                         startAt: $startAt
                         endAt: $endAt
-                        timezone: $timezone
                         after: $after
                     ) {
                         edges {
                             node {
-                                startAt
-                                endAt
                                 value
                                 unit
+                                ... on IntervalMeasurementType {
+                                    startAt
+                                    endAt
+                                }
                             }
                         }
                         pageInfo {
@@ -314,6 +325,10 @@ class OctopusClient:
         # Get property ID
         property_id = await self._fetch_property_id()
         if not property_id:
+            _LOGGER.warning(
+                "No property ID available for property-based consumption query. "
+                "This may indicate an authentication or account access issue."
+            )
             raise OctopusClientError("No property ID available for property-based consumption query")
         
         # Set date range (default to last 7 days)
@@ -345,7 +360,6 @@ class OctopusClient:
                     "startAt": start_date.isoformat() + "T00:00:00Z",
                     "endAt": end_date.isoformat() + "T23:59:59Z",
                     "first": page_size,
-                    "timezone": TIMEZONE_MADRID,  # Use Madrid timezone for server-side conversion
                 }
                 if after:
                     variables["after"] = after
@@ -353,8 +367,24 @@ class OctopusClient:
                 response = await client.execute_async(query, variables)
                 
                 if "errors" in response:
-                    error_msg = str(response["errors"])
-                    _LOGGER.error("GraphQL error fetching consumption via property: %s", error_msg)
+                    errors = response["errors"]
+                    # Extract actual GraphQL error messages
+                    error_messages = []
+                    for error in errors:
+                        if isinstance(error, dict):
+                            error_messages.append(error.get("message", str(error)))
+                        else:
+                            error_messages.append(str(error))
+                    error_msg = "; ".join(error_messages)
+                    _LOGGER.error(
+                        "GraphQL error fetching consumption via property: %s. "
+                        "Query variables: propertyId=%s, startAt=%s, endAt=%s, first=%s",
+                        error_msg,
+                        variables.get("propertyId"),
+                        variables.get("startAt"),
+                        variables.get("endAt"),
+                        variables.get("first")
+                    )
                     # Raise error to trigger fallback in fetch_consumption()
                     raise OctopusClientError(f"Property-based query failed: {error_msg}")
                 

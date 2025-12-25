@@ -128,11 +128,20 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         # Note: Octopus Energy España API may not be publicly available
         if self._octopus_client:
             try:
-                self._consumption_data = await self._octopus_client.fetch_consumption(
+                consumption_result = await self._octopus_client.fetch_consumption(
                     granularity="hourly"
                 )
+                self._consumption_data = consumption_result or []
+                if consumption_result:
+                    _LOGGER.debug(
+                        "Fetched %d consumption measurements",
+                        len(consumption_result)
+                    )
+                else:
+                    _LOGGER.debug("No consumption data returned from API")
             except OctopusClientError as err:
                 error_msg = str(err).lower()
+                self._consumption_data = []  # Reset on error
                 if "not available" in error_msg or "not be publicly" in error_msg:
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
@@ -140,8 +149,20 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                         "Price sensors will continue to work using market data."
                     )
                 else:
-                    _LOGGER.debug("Error updating consumption: %s", err)
+                    _LOGGER.warning(
+                        "Error updating consumption data: %s. "
+                        "Consumption sensors will show as Unknown.",
+                        err
+                    )
                 # Consumption is optional, don't fail
+            except Exception as err:
+                self._consumption_data = []  # Reset on unexpected error
+                _LOGGER.warning(
+                    "Unexpected error updating consumption data: %s. "
+                    "Consumption sensors will show as Unknown.",
+                    err,
+                    exc_info=True
+                )
 
         # Update billing data (daily)
         if self._octopus_client:
