@@ -1,4 +1,4 @@
-"""Constants for Octopus Energy Spain integration."""
+"""Constants for Octopus Energy España integration."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -46,7 +46,7 @@ MARKET_PUBLISH_HOUR = 14
 ESIOS_API_BASE_URL = "https://api.esios.ree.es"
 ESIOS_API_INDICATOR_PVPC = 1001  # PVPC hourly prices
 
-# Octopus Energy Spain uses GraphQL API
+# Octopus Energy España uses GraphQL API
 OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
 
 # Default timezone

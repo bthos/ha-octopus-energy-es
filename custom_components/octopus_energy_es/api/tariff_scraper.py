@@ -1,4 +1,4 @@
-"""Web scraper for Octopus Energy Spain tariff rates."""
+"""Web scraper for Octopus Energy España tariff rates."""
 from __future__ import annotations
 
 import logging
@@ -16,7 +16,7 @@ class TariffScraperError(Exception):
 
 
 class TariffScraper:
-    """Web scraper for Octopus Energy Spain tariff pages."""
+    """Web scraper for Octopus Energy España tariff pages."""
 
     BASE_URL = "https://octopusenergy.es"
 

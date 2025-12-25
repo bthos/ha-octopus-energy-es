@@ -1,6 +1,6 @@
 {
   "domain": "octopus_energy_es",
-  "name": "Octopus Energy Spain",
+  "name": "Octopus Energy España",
   "codeowners": ["@bthos"],
   "config_flow": true,
   "dependencies": [],

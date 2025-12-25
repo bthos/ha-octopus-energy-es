@@ -1,4 +1,4 @@
-"""Sensor entities for Octopus Energy Spain integration."""
+"""Sensor entities for Octopus Energy España integration."""
 from __future__ import annotations
 
 import logging
@@ -30,41 +30,41 @@ _LOGGER = logging.getLogger(__name__)
 
 PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="price",
-    name="Octopus Energy ES Price",
+    name="Octopus Energy España Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
 )
 
 CURRENT_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="current_price",
-    name="Octopus Energy ES Current Price",
+    name="Octopus Energy España Current Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
 )
 
 MIN_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="min_price",
-    name="Octopus Energy ES Min Price",
+    name="Octopus Energy España Min Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
 )
 
 MAX_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="max_price",
-    name="Octopus Energy ES Max Price",
+    name="Octopus Energy España Max Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
 )
 
 CHEAPEST_HOUR_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="cheapest_hour",
-    name="Octopus Energy ES Cheapest Hour",
+    name="Octopus Energy España Cheapest Hour",
     icon="mdi:clock-outline",
 )
 
 DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="daily_consumption",
-    name="Octopus Energy ES Daily Consumption",
+    name="Octopus Energy España Daily Consumption",
     native_unit_of_measurement="kWh",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:lightning-bolt",
@@ -72,7 +72,7 @@ DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="hourly_consumption",
-    name="Octopus Energy ES Hourly Consumption",
+    name="Octopus Energy España Hourly Consumption",
     native_unit_of_measurement="kWh",
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:lightning-bolt",
@@ -80,7 +80,7 @@ HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="monthly_consumption",
-    name="Octopus Energy ES Monthly Consumption",
+    name="Octopus Energy España Monthly Consumption",
     native_unit_of_measurement="kWh",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:lightning-bolt",
@@ -88,7 +88,7 @@ MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="daily_cost",
-    name="Octopus Energy ES Daily Cost",
+    name="Octopus Energy España Daily Cost",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -96,7 +96,7 @@ DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 CURRENT_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="current_bill",
-    name="Octopus Energy ES Current Bill",
+    name="Octopus Energy España Current Bill",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:receipt",
@@ -104,7 +104,7 @@ CURRENT_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 MONTHLY_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="monthly_bill",
-    name="Octopus Energy ES Monthly Bill",
+    name="Octopus Energy España Monthly Bill",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:receipt",
@@ -112,7 +112,7 @@ MONTHLY_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="last_invoice",
-    name="Octopus Energy ES Last Invoice",
+    name="Octopus Energy España Last Invoice",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:receipt",
@@ -120,13 +120,13 @@ LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="billing_period",
-    name="Octopus Energy ES Billing Period",
+    name="Octopus Energy España Billing Period",
     icon="mdi:calendar-range",
 )
 
 SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="sun_club_total_savings",
-    name="Octopus Energy ES SUN CLUB Total Savings",
+    name="Octopus Energy España SUN CLUB Total Savings",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -134,7 +134,7 @@ SUN_CLUB_TOTAL_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="sun_club_current_month_savings",
-    name="Octopus Energy ES SUN CLUB Current Month Savings",
+    name="Octopus Energy España SUN CLUB Current Month Savings",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -142,7 +142,7 @@ SUN_CLUB_CURRENT_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="sun_club_last_month_savings",
-    name="Octopus Energy ES SUN CLUB Last Month Savings",
+    name="Octopus Energy España SUN CLUB Last Month Savings",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -150,7 +150,7 @@ SUN_CLUB_LAST_MONTH_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="sun_club_regular_savings",
-    name="Octopus Energy ES SUN CLUB Regular Savings",
+    name="Octopus Energy España SUN CLUB Regular Savings",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -158,7 +158,7 @@ SUN_CLUB_REGULAR_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 SUN_CLUB_POWER_UP_SAVINGS_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="sun_club_power_up_savings",
-    name="Octopus Energy ES SUN CLUB Power-Up Savings",
+    name="Octopus Energy España SUN CLUB Power-Up Savings",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -170,7 +170,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Octopus Energy Spain sensors."""
+    """Set up Octopus Energy España sensors."""
     coordinator: OctopusEnergyESCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities: list[SensorEntity] = [
@@ -214,7 +214,7 @@ async def async_setup_entry(
 
 
 class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
-    """Base sensor for Octopus Energy Spain."""
+    """Base sensor for Octopus Energy España."""
 
     def __init__(
         self,
@@ -227,7 +227,7 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
-            "name": "Octopus Energy Spain",
+            "name": "Octopus Energy España",
             "manufacturer": "Octopus Energy",
             "model": coordinator._entry.data.get("tariff_type", "Unknown"),
         }

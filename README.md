@@ -1,10 +1,10 @@
 # Octopus Energy España - Home Assistant Integration
 
-Home Assistant custom component for Octopus Energy Spain, providing electricity price sensors, consumption tracking, and billing data integration.
+Home Assistant custom component for Octopus Energy España, providing electricity price sensors, consumption tracking, and billing data integration.
 
 ## Features
 
-- **Multiple Tariff Support**: Supports all Octopus Energy Spain tariff types:
+- **Multiple Tariff Support**: Supports all Octopus Energy España tariff types:
   - **Octopus Flexi**: Variable market price (0€/kWh admin cost)
   - **Octopus Relax**: Fixed price 24/7
   - **Octopus Solar**: Time-of-use tariff with P1/P2/P3 periods
@@ -31,7 +31,7 @@ Home Assistant custom component for Octopus Energy Spain, providing electricity 
   - Web scraping fallback for fixed tariff rates
 
 **Note**: 
-- Octopus Energy Spain uses a GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`. The integration connects to this API for billing and account data.
+- Octopus Energy España uses a GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`. The integration connects to this API for billing and account data.
 - **This integration requires the [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) to be configured first.** The PVPC integration provides market price data that this integration uses to calculate tariff-specific prices.
 
 ## Installation
@@ -50,7 +50,7 @@ Home Assistant custom component for Octopus Energy Spain, providing electricity 
 2. Go to Integrations
 3. Click the three dots menu → Custom repositories
 4. Add this repository URL
-5. Search for "Octopus Energy Spain" and install
+5. Search for "Octopus Energy España" and install
 6. Restart Home Assistant
 
 ### Manual Installation
@@ -58,13 +58,13 @@ Home Assistant custom component for Octopus Energy Spain, providing electricity 
 1. Copy the `custom_components/octopus_energy_es` folder to your Home Assistant `custom_components` directory
 2. Restart Home Assistant
 3. Go to Settings → Devices & Services → Add Integration
-4. Search for "Octopus Energy Spain"
+4. Search for "Octopus Energy España"
 
 ## Configuration
 
 ### Step 1: Select Tariff Type
 
-Choose your Octopus Energy Spain tariff:
+Choose your Octopus Energy España tariff:
 - **Flexi**: Variable market price (no additional configuration needed)
 - **Relax**: Fixed price tariff
 - **Solar**: Time-of-use tariff with periods
@@ -73,7 +73,7 @@ Choose your Octopus Energy Spain tariff:
 
 ### Step 2: Octopus Energy Credentials
 
-Enter your Octopus Energy Spain account credentials:
+Enter your Octopus Energy España account credentials:
 - **Email**: Your Octopus Energy email address
 - **Password**: Your account password
 

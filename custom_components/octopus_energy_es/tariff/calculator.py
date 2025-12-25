@@ -1,4 +1,4 @@
-"""Tariff calculation engine for Octopus Energy Spain."""
+"""Tariff calculation engine for Octopus Energy España."""
 from __future__ import annotations
 
 import logging

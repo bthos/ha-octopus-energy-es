@@ -1,13 +1,13 @@
-# Octopus Energy Spain
+# Octopus Energy España
 
-Home Assistant integration for Octopus Energy Spain providing electricity price sensors, consumption tracking, and billing data.
+Home Assistant integration for Octopus Energy España providing electricity price sensors, consumption tracking, and billing data.
 
 ## Features
 
-- Support for all Octopus Energy Spain tariff types (Flexi, Relax, Solar, Go, SUN CLUB)
+- Support for all Octopus Energy España tariff types (Flexi, Relax, Solar, Go, SUN CLUB)
 - Price sensors compatible with price-timeline-card
 - Consumption and billing tracking
-- ESIOS API integration for Spanish electricity market data
+- PVPC Hourly Pricing integration for Spanish electricity market data
 
 ## Installation
 
@@ -15,5 +15,5 @@ Install via HACS or manually by copying the `custom_components/octopus_energy_es
 
 ## Configuration
 
-Configure via Home Assistant UI: Settings → Devices & Services → Add Integration → Octopus Energy Spain
+Configure via Home Assistant UI: Settings → Devices & Services → Add Integration → Octopus Energy España
 

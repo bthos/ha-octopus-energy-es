@@ -1,4 +1,4 @@
-"""Octopus Energy Spain integration for Home Assistant."""
+"""Octopus Energy España integration for Home Assistant."""
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,7 +12,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Octopus Energy Spain from a config entry."""
+    """Set up Octopus Energy España from a config entry."""
     coordinator = OctopusEnergyESCoordinator(hass, entry)
     
     # Try to refresh data, but don't fail if it doesn't work initially

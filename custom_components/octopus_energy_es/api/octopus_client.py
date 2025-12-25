@@ -1,4 +1,4 @@
-"""Octopus Energy Spain API client for consumption and billing data."""
+"""Octopus Energy España API client for consumption and billing data."""
 from __future__ import annotations
 
 import logging
@@ -19,7 +19,7 @@ class OctopusClientError(Exception):
 
 
 class OctopusClient:
-    """Client for Octopus Energy Spain API."""
+    """Client for Octopus Energy España API."""
 
     def __init__(self, email: str, password: str, property_id: str) -> None:
         """Initialize Octopus Energy client."""
@@ -44,7 +44,7 @@ class OctopusClient:
 
     async def _authenticate(self) -> str:
         """
-        Authenticate with Octopus Energy Spain GraphQL API and return auth token.
+        Authenticate with Octopus Energy España GraphQL API and return auth token.
 
         Uses GraphQL mutation: obtainKrakenToken
         """
@@ -111,7 +111,7 @@ class OctopusClient:
                 _LOGGER.error("No auth token in response: %s", response)
                 raise OctopusClientError("No auth token received from API")
 
-            _LOGGER.debug("Successfully authenticated with Octopus Energy Spain API")
+            _LOGGER.debug("Successfully authenticated with Octopus Energy España API")
             return self._auth_token
 
         except Exception as err:
@@ -120,13 +120,13 @@ class OctopusClient:
             error_msg = str(err)
             if "Domain name not found" in error_msg or "Name or service not known" in error_msg:
                 _LOGGER.error(
-                    "Octopus Energy Spain API endpoint not found. "
+                    "Octopus Energy España API endpoint not found. "
                     "The API may not be publicly available. "
                     "Consumption and billing data will not be available. "
                     "Price data will still work using market data sources."
                 )
                 raise OctopusClientError(
-                    "Octopus Energy Spain API is not available. "
+                    "Octopus Energy España API is not available. "
                     "This integration can still provide price data using market sources, "
                     "but consumption and billing data will not be available."
                 ) from err
@@ -250,8 +250,6 @@ class OctopusClient:
                                         value
                                         unit
                                     }
-                                    utilityType
-                                    readingDirection
                                 }
                             }
                         }
@@ -343,13 +341,13 @@ class OctopusClient:
                 measurements = target_property.get("measurements", {})
                 edges = measurements.get("edges", [])
                 
-                # Extract measurements (filter for ELECTRICITY CONSUMPTION)
+                # Extract measurements
+                # Note: Property should already be electricity-specific, so all measurements
+                # from this property should be electricity consumption
                 for edge in edges:
                     node = edge.get("node", {})
-                    # Filter for electricity consumption measurements only
-                    utility_type = node.get("utilityType", "")
-                    reading_direction = node.get("readingDirection", "")
-                    if utility_type != "ELECTRICITY" or reading_direction != "CONSUMPTION":
+                    # Check if we have the required fields from IntervalMeasurementType
+                    if not node.get("startAt") or node.get("value") is None:
                         continue
                     
                     measurement = {

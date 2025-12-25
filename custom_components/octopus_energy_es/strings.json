@@ -3,14 +3,14 @@
     "step": {
       "tariff_type": {
         "title": "Select Tariff Type",
-        "description": "Choose your Octopus Energy Spain tariff type",
+        "description": "Choose your Octopus Energy España tariff type",
         "data": {
           "tariff_type": "Tariff Type"
         }
       },
       "octopus_credentials": {
         "title": "Octopus Energy Credentials (Optional)",
-        "description": "Enter your Octopus Energy Spain account credentials.\n\nYour account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use.",
+        "description": "Enter your Octopus Energy España account credentials.\n\nYour account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -58,13 +58,13 @@
     },
     "error": {
       "cannot_connect": "Unable to connect to Octopus Energy API. Please check your internet connection and try again.",
-      "invalid_auth": "The email or password you entered is incorrect. Please check your credentials and try again. Make sure you're using your Octopus Energy Spain account credentials.",
-      "no_accounts_found": "Authentication succeeded but no accounts were found. Please check that your account has access to at least one Octopus Energy Spain account. You may need to contact Octopus Energy support if this issue persists.",
+      "invalid_auth": "The email or password you entered is incorrect. Please check your credentials and try again. Make sure you're using your Octopus Energy España account credentials.",
+      "no_accounts_found": "Authentication succeeded but no accounts were found. Please check that your account has access to at least one Octopus Energy España account. You may need to contact Octopus Energy support if this issue persists.",
       "account_number_required": "Please enter your account number to continue.",
       "unknown": "An unexpected error occurred. Please check the Home Assistant logs for more details and try again."
     },
     "abort": {
-      "already_configured": "Octopus Energy Spain is already configured"
+      "already_configured": "Octopus Energy España is already configured"
     }
   }
 }

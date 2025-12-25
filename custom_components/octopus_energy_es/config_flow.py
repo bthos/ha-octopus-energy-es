@@ -1,4 +1,4 @@
-"""Config flow for Octopus Energy Spain integration."""
+"""Config flow for Octopus Energy España integration."""
 from __future__ import annotations
 
 import logging
@@ -32,7 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Octopus Energy Spain."""
+    """Handle a config flow for Octopus Energy España."""
 
     VERSION = 1
 
@@ -114,7 +114,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ]):
                         # API doesn't exist - this is OK, we can still use price data
                         _LOGGER.warning(
-                            "Octopus Energy Spain API is not publicly available. "
+                            "Octopus Energy España API is not publicly available. "
                             "The integration will work for price data only. "
                             "Consumption and billing features will not be available."
                         )
@@ -169,7 +169,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ]):
                     # API doesn't exist - allow user to proceed with price data only
                     _LOGGER.warning(
-                        "Octopus Energy Spain API is not publicly available. "
+                        "Octopus Energy España API is not publicly available. "
                         "The integration will work for price data only. "
                         "Consumption and billing features will not be available."
                     )
@@ -343,7 +343,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
             
             return self.async_create_entry(
-                title=f"Octopus Energy Spain - {tariff_name}",
+                title=f"Octopus Energy España - {tariff_name}",
                 data=self._data,
             )
 

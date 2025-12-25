@@ -1,4 +1,4 @@
-"""Data update coordinator for Octopus Energy Spain."""
+"""Data update coordinator for Octopus Energy España."""
 from __future__ import annotations
 
 import logging
@@ -32,7 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class OctopusEnergyESCoordinator(DataUpdateCoordinator):
-    """Coordinator for Octopus Energy Spain data updates."""
+    """Coordinator for Octopus Energy España data updates."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
@@ -123,7 +123,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 # Don't fail if tomorrow's prices aren't available yet
 
         # Update consumption data (every 15 minutes)
-        # Note: Octopus Energy Spain API may not be publicly available
+        # Note: Octopus Energy España API may not be publicly available
         if self._octopus_client:
             try:
                 self._consumption_data = await self._octopus_client.fetch_consumption(
@@ -133,7 +133,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:
                     _LOGGER.info(
-                        "Octopus Energy Spain API is not available. "
+                        "Octopus Energy España API is not available. "
                         "Consumption data will not be available. "
                         "Price sensors will continue to work using market data."
                     )
@@ -149,7 +149,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:
                     _LOGGER.info(
-                        "Octopus Energy Spain API is not available. "
+                        "Octopus Energy España API is not available. "
                         "Billing data will not be available. "
                         "Price sensors will continue to work using market data."
                     )
@@ -165,7 +165,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:
                     _LOGGER.info(
-                        "Octopus Energy Spain API is not available. "
+                        "Octopus Energy España API is not available. "
                         "Credits data will not be available. "
                         "Price sensors will continue to work using market data."
                     )
@@ -205,34 +205,69 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 raise ValueError(f"PVPC sensor '{self._pvpc_sensor}' not found. Please ensure the PVPC Hourly Pricing integration is configured.")
             
             # Get price data from sensor attributes
-            # PVPC sensor has 'data' attribute with hourly prices
+            # PVPC sensor can have either:
+            # 1. 'data' attribute with hourly prices array
+            # 2. Individual 'Price XXh' attributes (e.g., "Price 00h", "Price 01h", etc.)
             price_data = pvpc_state.attributes.get("data", [])
             
-            if not price_data:
-                _LOGGER.warning("PVPC sensor has no price data")
-                raise ValueError("PVPC sensor has no price data")
-            
-            # Convert PVPC sensor format to our format
-            # PVPC format: [{"start": "2025-01-15T00:00:00+01:00", "price": 0.12345}, ...]
-            for item in price_data:
-                if isinstance(item, dict):
-                    start_time = item.get("start") or item.get("start_time")
-                    price = item.get("price") or item.get("price_per_kwh")
-                    
-                    if start_time and price is not None:
-                        # Check if this price is for the target date
-                        if target_date:
-                            try:
-                                price_datetime = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-                                if price_datetime.date() != target_date:
-                                    continue
-                            except (ValueError, AttributeError):
-                                continue
+            if price_data:
+                # Format 1: Data array format
+                # PVPC format: [{"start": "2025-01-15T00:00:00+01:00", "price": 0.12345}, ...]
+                for item in price_data:
+                    if isinstance(item, dict):
+                        start_time = item.get("start") or item.get("start_time")
+                        price = item.get("price") or item.get("price_per_kwh")
                         
-                        market_prices.append({
-                            "start_time": start_time,
-                            "price_per_kwh": float(price),
-                        })
+                        if start_time and price is not None:
+                            # Check if this price is for the target date
+                            if target_date:
+                                try:
+                                    price_datetime = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                                    if price_datetime.date() != target_date:
+                                        continue
+                                except (ValueError, AttributeError):
+                                    continue
+                            
+                            market_prices.append({
+                                "start_time": start_time,
+                                "price_per_kwh": float(price),
+                            })
+            else:
+                # Format 2: Individual price attributes (Price 00h, Price 01h, etc.)
+                # Get the date for today (or target_date if specified)
+                if target_date:
+                    price_date = target_date
+                else:
+                    price_date = datetime.now(self._timezone).date()
+                
+                # Parse individual hour attributes
+                for hour in range(24):
+                    hour_str = f"{hour:02d}h"
+                    price_attr = f"Price {hour_str}"
+                    price_value = pvpc_state.attributes.get(price_attr)
+                    
+                    if price_value is not None:
+                        try:
+                            price_float = float(price_value)
+                            # Create ISO datetime string for this hour
+                            hour_datetime = datetime.combine(
+                                price_date,
+                                datetime.min.time().replace(hour=hour),
+                                self._timezone
+                            )
+                            start_time = hour_datetime.isoformat()
+                            
+                            market_prices.append({
+                                "start_time": start_time,
+                                "price_per_kwh": price_float,
+                            })
+                        except (ValueError, TypeError):
+                            _LOGGER.debug("Invalid price value for %s: %s", price_attr, price_value)
+                            continue
+            
+            if not market_prices:
+                _LOGGER.warning("PVPC sensor has no price data (checked both 'data' attribute and 'Price XXh' attributes)")
+                raise ValueError("PVPC sensor has no price data")
             
             _LOGGER.debug("PVPC sensor returned %d price points", len(market_prices))
             
