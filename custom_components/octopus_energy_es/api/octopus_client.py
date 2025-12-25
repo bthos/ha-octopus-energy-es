@@ -10,7 +10,6 @@ from python_graphql_client import GraphqlClient
 from zoneinfo import ZoneInfo
 
 from ..const import (
-    DEFAULT_HISTORICAL_CHUNK_SIZE_DAYS,
     OCTOPUS_API_BASE_URL,
     TIMEZONE_MADRID,
 )
@@ -204,37 +203,12 @@ class OctopusClient:
             _LOGGER.error("Error fetching property ID: %s", err)
             return None
 
-    def _calculate_date_chunks(
-        self, start_date: date, end_date: date, chunk_size_days: int
-    ) -> list[tuple[date, date]]:
-        """
-        Calculate date chunks for fetching large historical data ranges.
-        
-        Args:
-            start_date: Start date for the range
-            end_date: End date for the range
-            chunk_size_days: Maximum number of days per chunk
-            
-        Returns:
-            List of (chunk_start, chunk_end) date tuples
-        """
-        chunks: list[tuple[date, date]] = []
-        current_start = start_date
-        
-        while current_start <= end_date:
-            chunk_end = min(current_start + timedelta(days=chunk_size_days - 1), end_date)
-            chunks.append((current_start, chunk_end))
-            current_start = chunk_end + timedelta(days=1)
-        
-        return chunks
-
     async def fetch_consumption(
         self,
         start_date: date | None = None,
         end_date: date | None = None,
         granularity: str = "hourly",
         use_property_query: bool = True,
-        max_date_range_days: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Fetch consumption data using GraphQL.
@@ -245,8 +219,6 @@ class OctopusClient:
             granularity: 'hourly' or 'daily'
             use_property_query: If True, use property-based query (more efficient, default).
                                If False, use account-based query (fallback).
-            max_date_range_days: Maximum days per API request. If date range exceeds this,
-                               data will be fetched in chunks. Defaults to DEFAULT_HISTORICAL_CHUNK_SIZE_DAYS.
 
         Returns:
             List of consumption data dictionaries with:
@@ -255,74 +227,19 @@ class OctopusClient:
             - consumption: kWh value
             - unit: "kWh"
         """
-        if max_date_range_days is None:
-            max_date_range_days = DEFAULT_HISTORICAL_CHUNK_SIZE_DAYS
-        
         # Set default date range if not provided
         if not end_date:
             end_date = date.today()
         if not start_date:
             start_date = end_date - timedelta(days=30)
         
-        # Check if we need to chunk the date range
-        days_diff = (end_date - start_date).days + 1
-        if days_diff <= max_date_range_days:
-            # Small range - fetch directly
-            return await self._fetch_consumption_chunk(
-                start_date=start_date,
-                end_date=end_date,
-                granularity=granularity,
-                use_property_query=use_property_query,
-            )
-        
-        # Large range - fetch in chunks
-        _LOGGER.info(
-            "Fetching consumption data in chunks: %s to %s (%d days, chunk size: %d days)",
-            start_date.isoformat(),
-            end_date.isoformat(),
-            days_diff,
-            max_date_range_days
+        # Fetch consumption data directly
+        return await self._fetch_consumption_chunk(
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity,
+            use_property_query=use_property_query,
         )
-        
-        chunks = self._calculate_date_chunks(start_date, end_date, max_date_range_days)
-        all_measurements: list[dict[str, Any]] = []
-        
-        for idx, (chunk_start, chunk_end) in enumerate(chunks, 1):
-            _LOGGER.debug(
-                "Fetching chunk %d/%d: %s to %s",
-                idx,
-                len(chunks),
-                chunk_start.isoformat(),
-                chunk_end.isoformat()
-            )
-            try:
-                chunk_data = await self._fetch_consumption_chunk(
-                    start_date=chunk_start,
-                    end_date=chunk_end,
-                    granularity=granularity,
-                    use_property_query=use_property_query,
-                )
-                all_measurements.extend(chunk_data)
-                _LOGGER.debug("Chunk %d/%d: fetched %d measurements", idx, len(chunks), len(chunk_data))
-            except Exception as err:
-                _LOGGER.error(
-                    "Error fetching chunk %d/%d (%s to %s): %s",
-                    idx,
-                    len(chunks),
-                    chunk_start.isoformat(),
-                    chunk_end.isoformat(),
-                    err
-                )
-                # Continue with other chunks even if one fails
-                continue
-        
-        _LOGGER.info(
-            "Completed fetching consumption data: %d total measurements from %d chunks",
-            len(all_measurements),
-            len(chunks)
-        )
-        
-        return all_measurements
 
     async def _fetch_consumption_chunk(
         self,

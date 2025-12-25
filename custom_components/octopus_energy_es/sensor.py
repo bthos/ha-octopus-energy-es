@@ -541,9 +541,6 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
         if self._data_available_until:
             attrs["data_available_until"] = self._data_available_until.isoformat()
 
-        # Add historical data attributes
-        attrs.update(self._get_historical_data_attributes())
-
         return attrs
 
 
@@ -625,9 +622,6 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         if self._data_available_until:
             year, month = self._data_available_until
             attrs["data_available_until"] = f"{year:04d}-{month:02d}"
-
-        # Add historical data attributes
-        attrs.update(self._get_historical_data_attributes())
 
         return attrs
 
@@ -741,9 +735,6 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         if self._data_available_until:
             attrs["data_available_until"] = self._data_available_until.isoformat()
 
-        # Add historical data attributes
-        attrs.update(self._get_historical_data_attributes())
-
         return attrs
 
 
@@ -821,9 +812,6 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._data_available_until:
             attrs["data_available_until"] = f"{self._data_available_until:04d}"
-
-        # Add historical data attributes
-        attrs.update(self._get_historical_data_attributes())
 
         return attrs
 
