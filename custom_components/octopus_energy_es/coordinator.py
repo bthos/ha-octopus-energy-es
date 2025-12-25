@@ -233,7 +233,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                                 "price_per_kwh": float(price),
                             })
             else:
-                # Format 2: Individual price attributes (Price 00h, Price 01h, etc.)
+                # Format 2: Individual price attributes (price_00h, price_01h, etc.)
                 # Get the date for today (or target_date if specified)
                 if target_date:
                     price_date = target_date
@@ -241,10 +241,14 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     price_date = datetime.now(self._timezone).date()
                 
                 # Parse individual hour attributes
+                # PVPC sensor uses lowercase with underscore: price_00h, price_01h, etc.
                 for hour in range(24):
-                    hour_str = f"{hour:02d}h"
-                    price_attr = f"Price {hour_str}"
-                    price_value = pvpc_state.attributes.get(price_attr)
+                    hour_str = f"{hour:02d}"
+                    # Try both formats: price_00h (actual) and Price 00h (alternative)
+                    price_attr_underscore = f"price_{hour_str}h"
+                    price_attr_space = f"Price {hour_str}h"
+                    
+                    price_value = pvpc_state.attributes.get(price_attr_underscore) or pvpc_state.attributes.get(price_attr_space)
                     
                     if price_value is not None:
                         try:
@@ -262,7 +266,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                                 "price_per_kwh": price_float,
                             })
                         except (ValueError, TypeError):
-                            _LOGGER.debug("Invalid price value for %s: %s", price_attr, price_value)
+                            _LOGGER.debug("Invalid price value for %s or %s: %s", price_attr_underscore, price_attr_space, price_value)
                             continue
             
             if not market_prices:
