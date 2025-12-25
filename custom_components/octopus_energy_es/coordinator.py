@@ -588,6 +588,45 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Unexpected error loading historical credits: %s", err, exc_info=True)
             return []
 
+    def get_historical_data_range(self) -> dict[str, Any] | None:
+        """
+        Get the date range and count of available historical consumption data.
+        
+        Returns:
+            Dict with 'start_date', 'end_date', and 'count' keys, or None if no historical data
+        """
+        if not self._historical_data:
+            return None
+        
+        try:
+            # Find earliest and latest dates from historical data
+            dates: list[date] = []
+            for item in self._historical_data:
+                if isinstance(item, dict):
+                    start_time_str = item.get("start_time") or item.get("date")
+                    if start_time_str:
+                        try:
+                            dt = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                            dt_madrid = dt.astimezone(self._timezone)
+                            dates.append(dt_madrid.date())
+                        except (ValueError, TypeError):
+                            continue
+            
+            if not dates:
+                return None
+            
+            dates.sort()
+            return {
+                "start_date": dates[0].isoformat(),
+                "end_date": dates[-1].isoformat(),
+                "count": len(self._historical_data),
+            }
+        except Exception as err:
+            _LOGGER.debug("Error getting historical data range: %s", err)
+            return None
+
     async def _fetch_and_calculate_prices(
         self, target_date: date | None = None
     ) -> list[dict[str, Any]]:
