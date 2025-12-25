@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -104,6 +104,22 @@ HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
 MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="monthly_consumption",
     name="Octopus Energy España Monthly Consumption",
+    native_unit_of_measurement="kWh",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:lightning-bolt",
+)
+
+WEEKLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="weekly_consumption",
+    name="Octopus Energy España Weekly Consumption",
+    native_unit_of_measurement="kWh",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:lightning-bolt",
+)
+
+YEARLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="yearly_consumption",
+    name="Octopus Energy España Yearly Consumption",
     native_unit_of_measurement="kWh",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:lightning-bolt",
@@ -216,6 +232,12 @@ async def async_setup_entry(
         ),
         OctopusEnergyESMonthlyConsumptionSensor(
             coordinator, MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESWeeklyConsumptionSensor(
+            coordinator, WEEKLY_CONSUMPTION_SENSOR_DESCRIPTION
+        ),
+        OctopusEnergyESYearlyConsumptionSensor(
+            coordinator, YEARLY_CONSUMPTION_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
         OctopusEnergyESCurrentBillSensor(coordinator, CURRENT_BILL_SENSOR_DESCRIPTION),
@@ -442,7 +464,11 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
                     if item_dt_madrid and item_dt_madrid.date() == today:
                         total += float(item.get("consumption", item.get("value", 0)))
 
-        return round(total, 3) if total > 0 else None
+        # Return 0 if we have consumption data but no data for today (data not available yet)
+        # Return None only if we have no consumption data at all
+        if len(consumption) > 0:
+            return round(total, 3)
+        return None
 
 
 class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
@@ -470,6 +496,10 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
                         if item_hour == current_hour:
                             return float(item.get("consumption", item.get("value", 0)))
 
+        # Return 0 if we have consumption data but no data for current hour (data not available yet)
+        # Return None only if we have no consumption data at all
+        if len(consumption) > 0:
+            return 0.0
         return None
 
 
@@ -499,7 +529,79 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
                     if item_dt_madrid and item_dt_madrid.month == current_month and item_dt_madrid.year == current_year:
                         total += float(item.get("consumption", item.get("value", 0)))
 
-        return round(total, 3) if total > 0 else None
+        # Return total (even if 0) if we have consumption data
+        # Return None only if we have no consumption data at all
+        if len(consumption) > 0:
+            return round(total, 3) if total > 0 else 0.0
+        return None
+
+
+class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
+    """Weekly consumption sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return weekly consumption (last 7 days)."""
+        data = self.coordinator.data
+        consumption = data.get("consumption", [])
+
+        if not consumption:
+            return None
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        # Calculate date range for last 7 days
+        end_date = now.date()
+        start_date = end_date - timedelta(days=6)  # Include today, so 6 days back + today = 7 days
+
+        total = 0.0
+
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid:
+                        item_date = item_dt_madrid.date()
+                        if start_date <= item_date <= end_date:
+                            total += float(item.get("consumption", item.get("value", 0)))
+
+        # Return total (even if 0) if we have consumption data
+        # Return None only if we have no consumption data at all
+        if len(consumption) > 0:
+            return round(total, 3) if total > 0 else 0.0
+        return None
+
+
+class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
+    """Yearly consumption sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return yearly consumption."""
+        data = self.coordinator.data
+        consumption = data.get("consumption", [])
+
+        if not consumption:
+            return None
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_year = now.year
+
+        total = 0.0
+
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.year == current_year:
+                        total += float(item.get("consumption", item.get("value", 0)))
+
+        # Return total (even if 0) if we have consumption data
+        # Return None only if we have no consumption data at all
+        if len(consumption) > 0:
+            return round(total, 3) if total > 0 else 0.0
+        return None
 
 
 class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):

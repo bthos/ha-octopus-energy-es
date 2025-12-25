@@ -298,6 +298,7 @@ class OctopusClient:
                 $startAt: DateTime
                 $endAt: DateTime
                 $timezone: String
+                $after: String
             ) {
                 property(id: $propertyId) {
                     measurements(
@@ -308,6 +309,7 @@ class OctopusClient:
                         startAt: $startAt
                         endAt: $endAt
                         timezone: $timezone
+                        after: $after
                     ) {
                         edges {
                             node {
@@ -522,8 +524,14 @@ class OctopusClient:
                 if not after:
                     break
                 
-                # Limit total number of pages to avoid infinite loops
-                if len(all_measurements) >= first:
+                # Continue fetching pages until hasNextPage is False
+                # Don't limit by 'first' as we want all available data
+                # Only limit to prevent infinite loops (max 2000 measurements = ~83 days of hourly data)
+                if len(all_measurements) >= 2000:
+                    _LOGGER.warning(
+                        "Reached maximum measurement limit (2000). "
+                        "Some data may be missing. Consider reducing the date range."
+                    )
                     break
             
             if len(all_measurements) == 0:
@@ -724,8 +732,14 @@ class OctopusClient:
                 if not after:
                     break
                 
-                # Limit total number of pages to avoid infinite loops
-                if len(all_measurements) >= first:
+                # Continue fetching pages until hasNextPage is False
+                # Don't limit by 'first' as we want all available data
+                # Only limit to prevent infinite loops (max 2000 measurements = ~83 days of hourly data)
+                if len(all_measurements) >= 2000:
+                    _LOGGER.warning(
+                        "Reached maximum measurement limit (2000). "
+                        "Some data may be missing. Consider reducing the date range."
+                    )
                     break
             
             _LOGGER.debug("Fetched %d consumption measurements", len(all_measurements))
