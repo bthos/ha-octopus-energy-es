@@ -1,0 +1,27 @@
+load_historical_data:
+  name: Load historical data
+  description: Load historical consumption data from Octopus Energy España
+  target:
+    entity:
+      domain: octopus_energy_es
+  fields:
+    start_date:
+      name: Start date
+      description: Start date for historical data (YYYY-MM-DD format)
+      required: false
+      selector:
+        text:
+    end_date:
+      name: End date
+      description: End date for historical data (YYYY-MM-DD format), defaults to today
+      required: false
+      selector:
+        text:
+    force_reload:
+      name: Force reload
+      description: Force reload even if data already loaded
+      required: false
+      default: false
+      selector:
+        boolean:
+

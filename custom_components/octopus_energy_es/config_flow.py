@@ -11,6 +11,9 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
+    CONF_HISTORICAL_DATA_RANGE,
+    CONF_HISTORICAL_DATA_START_DATE,
+    CONF_LOAD_HISTORICAL_DATA,
     CONF_PVPC_SENSOR,
     CONF_PROPERTY_ID,
     CONF_TARIFF_TYPE,
@@ -18,6 +21,11 @@ from .const import (
     DEFAULT_P2_HOURS,
     DEFAULT_P3_HOURS,
     DOMAIN,
+    HISTORICAL_RANGE_1_YEAR,
+    HISTORICAL_RANGE_2_YEARS,
+    HISTORICAL_RANGE_ALL_AVAILABLE,
+    HISTORICAL_RANGE_CUSTOM,
+    HISTORICAL_RANGE_OPTIONS,
     SUN_CLUB_DAYLIGHT_END,
     SUN_CLUB_DAYLIGHT_START,
     TARIFF_TYPE_FLEXI,
@@ -338,6 +346,10 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
             
+            # Only show historical data step if credentials are available
+            if self._data.get(CONF_EMAIL) and self._data.get(CONF_PASSWORD):
+                return await self.async_step_historical_data()
+            
             # Get tariff type for title
             tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
             tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
@@ -355,4 +367,90 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
         )
+
+    async def async_step_historical_data(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle historical data configuration."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            load_historical = user_input.get(CONF_LOAD_HISTORICAL_DATA, False)
+            self._data[CONF_LOAD_HISTORICAL_DATA] = load_historical
+            
+            if load_historical:
+                historical_range = user_input.get(CONF_HISTORICAL_DATA_RANGE)
+                self._data[CONF_HISTORICAL_DATA_RANGE] = historical_range
+                
+                if historical_range == HISTORICAL_RANGE_CUSTOM:
+                    start_date = user_input.get(CONF_HISTORICAL_DATA_START_DATE)
+                    if start_date:
+                        # Validate date format
+                        try:
+                            from datetime import datetime
+                            datetime.strptime(start_date, "%Y-%m-%d")
+                            self._data[CONF_HISTORICAL_DATA_START_DATE] = start_date
+                        except ValueError:
+                            errors[CONF_HISTORICAL_DATA_START_DATE] = "invalid_date_format"
+                    else:
+                        errors[CONF_HISTORICAL_DATA_START_DATE] = "start_date_required"
+                
+                if errors:
+                    return self.async_show_form(
+                        step_id="historical_data",
+                        data_schema=self._get_historical_data_schema(user_input),
+                        errors=errors,
+                    )
+            
+            # Get tariff type for title
+            tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
+            tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
+            
+            return self.async_create_entry(
+                title=f"Octopus Energy España - {tariff_name}",
+                data=self._data,
+            )
+
+        return self.async_show_form(
+            step_id="historical_data",
+            data_schema=self._get_historical_data_schema(),
+            errors=errors,
+        )
+
+    def _get_historical_data_schema(
+        self, user_input: dict[str, Any] | None = None
+    ) -> vol.Schema:
+        """Build the historical data configuration schema."""
+        default_load = user_input.get(CONF_LOAD_HISTORICAL_DATA, True) if user_input else True
+        default_range = (
+            user_input.get(CONF_HISTORICAL_DATA_RANGE, HISTORICAL_RANGE_1_YEAR)
+            if user_input
+            else HISTORICAL_RANGE_1_YEAR
+        )
+        default_start_date = (
+            user_input.get(CONF_HISTORICAL_DATA_START_DATE, "")
+            if user_input
+            else ""
+        )
+
+        schema_dict: dict[str, Any] = {
+            vol.Optional(CONF_LOAD_HISTORICAL_DATA, default=default_load): bool,
+        }
+
+        if default_load or (user_input and user_input.get(CONF_LOAD_HISTORICAL_DATA, False)):
+            schema_dict[vol.Optional(CONF_HISTORICAL_DATA_RANGE, default=default_range)] = vol.In(
+                {
+                    HISTORICAL_RANGE_1_YEAR: "1 Year",
+                    HISTORICAL_RANGE_2_YEARS: "2 Years",
+                    HISTORICAL_RANGE_ALL_AVAILABLE: "All Available",
+                    HISTORICAL_RANGE_CUSTOM: "Custom Date Range",
+                }
+            )
+
+            if default_range == HISTORICAL_RANGE_CUSTOM or (
+                user_input and user_input.get(CONF_HISTORICAL_DATA_RANGE) == HISTORICAL_RANGE_CUSTOM
+            ):
+                schema_dict[vol.Required(CONF_HISTORICAL_DATA_START_DATE, default=default_start_date)] = str
+
+        return vol.Schema(schema_dict)
 

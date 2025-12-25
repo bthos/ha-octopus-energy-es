@@ -19,6 +19,10 @@ from .const import (
     CONF_PVPC_SENSOR,
     CONF_TARIFF_TYPE,
     DOMAIN,
+    HISTORICAL_RANGE_1_YEAR,
+    HISTORICAL_RANGE_2_YEARS,
+    HISTORICAL_RANGE_ALL_AVAILABLE,
+    HISTORICAL_RANGE_CUSTOM,
     MARKET_PUBLISH_HOUR,
     TIMEZONE_MADRID,
     UPDATE_INTERVAL_BILLING,
@@ -235,6 +239,83 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         )
         
         return result
+
+    async def async_load_historical_data(
+        self, start_date: date | None = None, end_date: date | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Load historical consumption data for the specified date range.
+        
+        Args:
+            start_date: Start date for historical data. If None, uses config entry settings.
+            end_date: End date for historical data. If None, defaults to today.
+            
+        Returns:
+            List of consumption measurements
+        """
+        if not self._octopus_client:
+            _LOGGER.warning("Cannot load historical data: Octopus Energy client not available")
+            return []
+        
+        # Determine date range from config entry if not provided
+        if start_date is None or end_date is None:
+            entry_data = self._entry.data
+            historical_range = entry_data.get("historical_data_range")
+            
+            if not end_date:
+                end_date = date.today()
+            
+            if not start_date:
+                if historical_range == HISTORICAL_RANGE_1_YEAR:
+                    start_date = end_date - timedelta(days=365)
+                elif historical_range == HISTORICAL_RANGE_2_YEARS:
+                    start_date = end_date - timedelta(days=730)
+                elif historical_range == HISTORICAL_RANGE_CUSTOM:
+                    start_date_str = entry_data.get("historical_data_start_date")
+                    if start_date_str:
+                        try:
+                            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                        except ValueError:
+                            _LOGGER.error("Invalid start_date format: %s", start_date_str)
+                            return []
+                    else:
+                        _LOGGER.error("Custom date range selected but no start_date provided")
+                        return []
+                elif historical_range == HISTORICAL_RANGE_ALL_AVAILABLE:
+                    # For "all available", we'll try to fetch from a reasonable start date
+                    # The API will return what's available
+                    start_date = end_date - timedelta(days=365 * 2)  # Start with 2 years, API will limit
+                else:
+                    # Default to 1 year if not specified
+                    start_date = end_date - timedelta(days=365)
+        
+        _LOGGER.info(
+            "Loading historical consumption data: %s to %s",
+            start_date.isoformat(),
+            end_date.isoformat()
+        )
+        
+        try:
+            # Fetch consumption data with chunking support
+            consumption_data = await self._octopus_client.fetch_consumption(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="hourly",
+                use_property_query=True,
+            )
+            
+            _LOGGER.info(
+                "Successfully loaded %d historical consumption measurements",
+                len(consumption_data)
+            )
+            
+            return consumption_data
+        except OctopusClientError as err:
+            _LOGGER.error("Error loading historical data: %s", err)
+            return []
+        except Exception as err:
+            _LOGGER.error("Unexpected error loading historical data: %s", err, exc_info=True)
+            return []
 
     async def _fetch_and_calculate_prices(
         self, target_date: date | None = None
