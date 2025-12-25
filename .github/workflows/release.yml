@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Validate"]
+    types:
+      - completed
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-tags: true
+
+      - name: Get version from manifest
+        id: get_version
+        run: |
+          VERSION=$(python3 -c "import json; f=open('custom_components/octopus_energy_es/manifest.json'); data=json.load(f); print(data['version']); f.close()")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.get_version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.get_version.outputs.version }} does not exist"
+          fi
+
+      - name: Create tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.get_version.outputs.version }}" -m "Release v${{ steps.get_version.outputs.version }}"
+          git push origin "v${{ steps.get_version.outputs.version }}"
+
+      - name: Create release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            ## Release v${{ steps.get_version.outputs.version }}
+
+            This release was automatically created after successful validation.
+
+            ### Changes
+            See [commits](https://github.com/${{ github.repository }}/compare/${{ github.event.workflow_run.head_sha }}...HEAD) for details.
+
+            ### Installation
+            Install via HACS or download from [releases](https://github.com/${{ github.repository }}/releases).
+          draft: false
+          prerelease: false
+
+      - name: Skip release (tag exists)
+        if: steps.check_tag.outputs.exists == 'true'
+        run: |
+          echo "Tag v${{ steps.get_version.outputs.version }} already exists. Skipping release creation."
+

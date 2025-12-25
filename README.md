@@ -1,8 +1,10 @@
 # 🐙 Octopus Energy España - Home Assistant Integration
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bthos&repository=ha-octopus-energy-es&category=integration)
+[![HACS](https://img.shields.io/badge/HACS-passed-green.svg)](https://github.com/hacs/integration)
 
 Home Assistant custom component for Octopus Energy España, providing electricity price sensors, consumption tracking, and billing data integration.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bthos&repository=ha-octopus-energy-es&category=integration)
 
 ## ✨ Features
 
