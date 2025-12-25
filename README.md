@@ -1,10 +1,30 @@
 # 🐙 Octopus Energy España - Home Assistant Integration
 
-[![HACS](https://img.shields.io/badge/HACS-passed-green.svg)](https://github.com/hacs/integration)
+[![HACS Validation](https://img.shields.io/github/actions/workflow/status/bthos/ha-octopus-energy-es/validate.yml?branch=main&label=HACS&logo=github)](https://github.com/bthos/ha-octopus-energy-es/actions/workflows/validate.yml)
 
 Home Assistant custom component for Octopus Energy España, providing electricity price sensors, consumption tracking, and billing data integration.
 
+## 💝 Support the Developer
+
+**Love this integration?** Help support its development by joining Octopus Energy España!
+
+When you sign up using the button below, **you'll receive 50€ credit** on your second electricity bill, and **the integration developer will also receive 50€** - a win-win that helps keep this project maintained and improved! 🎉
+
+<div align="center">
+
+[![Join Octopus Energy España - Get 50€](https://img.shields.io/badge/Join%20Octopus%20Energy-Get%2050€%20Credit-FF6B35?style=for-the-badge&logo=octopusdeploy&logoColor=white)](https://share.octopusenergy.es/graceful-banana-618)
+
+</div>
+
+✨ **100% renewable energy** • 📊 **Transparent pricing** • ⭐ **4.8/5 customer rating** • 🔓 **No permanence**
+
+*La energía de la buena se comparte* - Your support helps make this integration better for everyone! 🌟
+
+<div align="center">
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bthos&repository=ha-octopus-energy-es&category=integration)
+
+</div>
 
 ## ✨ Features
 
@@ -24,34 +44,40 @@ Supports all Octopus Energy España tariff types:
 - Separate `today` and `tomorrow` price arrays
 
 ### 📈 Consumption Tracking
-- Daily, hourly, and monthly consumption sensors
+- Daily, hourly, weekly, monthly, and yearly consumption sensors
 - Daily cost calculation
 - Real-time consumption monitoring
+- Shows latest available data when current period data isn't yet processed
 
 ### 🧾 Billing Integration
-- Current bill, monthly bill, and last invoice sensors
+- Last invoice sensor
 - Billing period tracking
 - Account information sensor with CUPS, address, and tariff details
+- Credits sensor (shows last month's credits as Octopus calculates them postfactum)
+- Estimated credits sensor (calculates future credits based on consumption during discount hours)
 
 ### 🔌 Data Sources
-- **Primary**: PVPC Hourly Pricing integration ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices
+- **Octopus Energy API**: For consumption and billing data (requires credentials)
+- **Primary**: PVPC Hourly Pricing integration ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices (required for market-based tariffs)
 - **Fallback**: OMIE API for wholesale market prices
-- **Octopus Energy API**: For consumption and billing data (if available)
-- **Web scraping**: Fallback for fixed tariff rates
 
 > **ℹ️ Note**: 
-> - Octopus Energy España uses a GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`. The integration connects to this API for billing and account data.
-> - **This integration requires the [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) to be configured first.** The PVPC integration provides market price data that this integration uses to calculate tariff-specific prices.
+> - Octopus Energy España uses a GraphQL API at `https://octopusenergy.es/api/graphql/kraken`. The integration connects to this API for consumption, billing, and account data.
+> - **PVPC Hourly Pricing integration is required only for market-based tariffs.** For fixed tariffs, you can configure rates manually without PVPC.
+> - **Octopus Energy credentials (email/password) are required** to access consumption and billing data.
 
 ## 📦 Installation
 
 ### Prerequisites
 
-**⚠️ This integration requires the [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) to be configured first.**
+**For market-based tariffs:**
+- **⚠️ The [PVPC Hourly Pricing integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/) must be configured first.**
+  1. Go to **Settings → Devices & Services → Add Integration**
+  2. Search for **"Spain electricity hourly pricing (PVPC)"** and configure it
+  3. Note the sensor entity ID (default is `sensor.pvpc`)
 
-1. Go to **Settings → Devices & Services → Add Integration**
-2. Search for **"Spain electricity hourly pricing (PVPC)"** and configure it
-3. Note the sensor entity ID (default is `sensor.pvpc`)
+**For all tariffs:**
+- **Octopus Energy España account credentials (email and password) are required** to access consumption and billing data.
 
 ### 🎯 HACS (Recommended)
 
@@ -71,61 +97,72 @@ Supports all Octopus Energy España tariff types:
 
 ## ⚙️ Configuration
 
-### Step 1: Select Tariff Type
+The configuration flow guides you through setting up your tariff using a category-based approach:
 
-Choose your Octopus Energy España tariff:
-- **⚡ Flexi**: Variable market price (no additional configuration needed)
-- **🔒 Relax**: Fixed price tariff
-- **☀️ Solar**: Time-of-use tariff with periods
-- **🚗 Go**: EV tariff
-- **🌞 SUN CLUB**: Daylight discount tariff
-
-### Step 2: Octopus Energy Credentials
+### Step 1: Octopus Energy Credentials (Required)
 
 Enter your Octopus Energy España account credentials:
-- **📧 Email**: Your Octopus Energy email address
-- **🔐 Password**: Your account password
+- **📧 Email**: Your Octopus Energy email address (required)
+- **🔐 Password**: Your account password (required)
 
-> **💡 Note**: Your account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use in the next step.
+> **💡 Note**: Your account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use.
 
-### Step 3: Tariff-Specific Configuration
+### Step 2: Pricing Model
 
-#### ⚡ Flexi
-No additional configuration required (uses market price directly).
+Choose your pricing model:
+- **📈 Market**: Prices vary based on the electricity market (requires PVPC sensor)
+- **🔒 Fixed**: Fixed price per kWh regardless of market fluctuations
 
-#### 🔒 Relax
-- **Fixed Rate**: Enter your fixed rate in €/kWh
+### Step 3: Time Structure (Fixed pricing only)
 
-#### ☀️ Solar
-- **P1 Rate**: Peak period rate (€/kWh)
-- **P2 Rate**: Standard period rate (€/kWh)
-- **P3 Rate**: Valley period rate (€/kWh)
-- **Solar Surplus Rate**: Compensation rate for solar surplus (default: 0.04 €/kWh)
+If you selected Fixed pricing, choose your time structure:
+- **⚡ Single Rate**: Same price throughout the day
+- **⏰ Time-of-Use**: Different prices for different periods (P1/P2/P3)
 
-**Default periods:**
-- **P1 (Peak)**: 10:00-14:00 & 18:00-22:00
-- **P2 (Standard)**: 08:00-10:00 & 14:00-18:00 & 22:00-00:00
+### Step 4: Energy Rates Configuration
+
+**For Market pricing:**
+- No rates needed (uses market prices from PVPC sensor)
+
+**For Fixed pricing:**
+- **Single Rate**: Enter your fixed rate in €/kWh
+- **Time-of-Use**: Enter rates for each period:
+  - **P1 Rate**: Peak period rate (€/kWh)
+  - **P2 Rate**: Standard period rate (€/kWh)
+  - **P3 Rate**: Valley period rate (€/kWh)
+  - **Management Fee**: Monthly management fee (€/month)
+
+**Default time-of-use periods (weekdays):**
+- **P1 (Peak)**: 11:00-14:00 & 19:00-22:00
+- **P2 (Standard)**: 09:00-10:00, 15:00-18:00, 23:00
 - **P3 (Valley)**: 00:00-08:00
+- **Weekends/Holidays**: All hours are P3 (Valley)
 
-#### 🚗 Go
-- **P1 Rate**: Peak period rate (€/kWh)
-- **P2 Rate**: Standard period rate (€/kWh)
-- **P3 Rate**: Valley period rate (€/kWh)
+### Step 5: Power Rates (Optional)
 
-Periods are similar to Solar but optimized for EV charging.
+Configure power (potencia) rates:
+- **Power P1 Rate**: Peak period power rate (€/kW/day)
+- **Power P2 Rate**: Valley period power rate (€/kW/day)
 
-#### 🌞 SUN CLUB
-- **Daylight Start**: Start hour for daylight discount (default: 12)
-- **Daylight End**: End hour for daylight discount (default: 18)
-- **Discount Percentage**: Discount percentage (default: 0.45 = 45%)
+### Step 6: Solar Features (Optional)
 
-### Step 4: PVPC Sensor Selection
+If you have solar panels:
+- **Solar Surplus Rate**: Compensation rate for surplus energy (€/kWh)
 
-Select the PVPC Hourly Pricing sensor to use for market price data:
+### Step 7: Discount Programs (Optional)
+
+Configure discount hours:
+- **Discount Start Hour**: Start hour for discount period (0-23)
+- **Discount End Hour**: End hour for discount period (0-23)
+- **Discount Percentage**: Discount percentage (0-100%)
+
+### Step 8: PVPC Sensor Selection (Market pricing only)
+
+If you selected Market pricing, select the PVPC Hourly Pricing sensor:
 - **Default**: `sensor.pvpc` (if you haven't changed the sensor name)
 - **Custom**: Enter your custom PVPC sensor entity ID if you renamed it
 
-The integration will read price data from this sensor and calculate tariff-specific prices based on your selected tariff type.
+> **💡 Note**: Fixed pricing tariffs skip this step as they don't require market price data.
 
 ## 📊 Sensors
 
@@ -140,25 +177,25 @@ The integration will read price data from this sensor and calculate tariff-speci
 
 ### 📈 Consumption Sensors
 
-- `sensor.octopus_energy_es_daily_consumption`: Daily consumption in kWh
-- `sensor.octopus_energy_es_hourly_consumption`: Current hour consumption in kWh
+- `sensor.octopus_energy_es_daily_consumption`: Daily consumption in kWh (shows latest available if today's data isn't processed yet)
+- `sensor.octopus_energy_es_hourly_consumption`: Hourly consumption in kWh (shows latest available if current hour's data isn't processed yet)
+- `sensor.octopus_energy_es_weekly_consumption`: Weekly consumption in kWh
 - `sensor.octopus_energy_es_monthly_consumption`: Monthly consumption in kWh
-- `sensor.octopus_energy_es_daily_cost`: Daily cost in €
+- `sensor.octopus_energy_es_yearly_consumption`: Yearly consumption in kWh
+- `sensor.octopus_energy_es_daily_cost`: Daily cost in € (calculated from consumption and prices)
 
 ### 🧾 Billing Sensors
 
-- `sensor.octopus_energy_es_current_bill`: Current bill amount in €
-- `sensor.octopus_energy_es_monthly_bill`: Monthly bill amount in €
 - `sensor.octopus_energy_es_last_invoice`: Last invoice amount in €
 - `sensor.octopus_energy_es_billing_period`: Current billing period date range
 
-### 🌞 SUN CLUB Savings Sensors
+### 💰 Credits Sensors
 
-- `sensor.octopus_energy_es_sun_club_total_savings`: Total SUN CLUB savings
-- `sensor.octopus_energy_es_sun_club_current_month_savings`: Current month savings
-- `sensor.octopus_energy_es_sun_club_last_month_savings`: Last month savings
-- `sensor.octopus_energy_es_sun_club_regular_savings`: Regular SUN CLUB savings
-- `sensor.octopus_energy_es_sun_club_power_up_savings`: Power-Up savings
+- `sensor.octopus_energy_es_credits`: Credits from Octopus Energy (shows last month's credits as Octopus calculates them postfactum)
+  - **Attributes**: Breakdown by reason code (e.g., SUN_CLUB, SUN_CLUB_POWER_UP)
+- `sensor.octopus_energy_es_credits_estimated`: Estimated credits for current month based on consumption during discount hours
+  - **Attributes**: Discount hours and discount percentage
+  - **Note**: Only available if discount program is configured
 
 ### 👤 Account Sensor
 
@@ -197,17 +234,16 @@ The sensor provides data in the required format:
 **Solution**: 
 - Verify your email and password are correct
 - Check that your account is active
-- The integration uses the GraphQL API at `https://api.oees-kraken.energy/v1/graphql/`
-- If you see connection errors, check your internet connection and firewall settings
+- The integration uses the GraphQL API at `https://octopusenergy.es/api/graphql/kraken` (also functions at `https://api.oees-kraken.energy/v1/graphql/`)
 
-### 💰 Prices Not Updating
+### 💰 Prices Not Updating (Market tariffs only)
 
 - Ensure the PVPC Hourly Pricing integration is configured and working
 - Verify the PVPC sensor entity ID is correct (default: `sensor.pvpc`)
 - Check that the PVPC sensor has price data available
-- Verify your internet connection
 - Check Home Assistant logs for API errors
 - ⏰ Spanish market publishes tomorrow's prices at 14:00 CET - prices may not be available before that time
+- **Note**: Fixed pricing tariffs don't require PVPC sensor
 
 ### 📈 Consumption Data Not Available
 
@@ -216,21 +252,17 @@ The sensor provides data in the required format:
 - Ensure your account has consumption data available
 - ⏰ Consumption data may take some time to appear after initial setup
 
-### 🔒 Tariff Rates Not Found
+### 🔒 Configuration Issues
 
-- For fixed tariffs (Relax, Solar, Go), rates can be entered manually
-- The integration will attempt to scrape rates from the Octopus Energy website as a fallback
-- If scraping fails, manual entry is required
+- For fixed pricing, ensure all required rates are entered correctly
+- Verify that time-of-use periods cover all 24 hours for weekdays
+- Check that discount hours are valid (0-23) if discount program is configured
+- Ensure power rates are configured if you want power cost calculations
 
 ## 📚 Dependencies
 
-- **PVPC Hourly Pricing Integration**: Required for market price data. See [installation instructions](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/).
-
-## ⚡ API Rate Limits
-
-- **PVPC Integration**: Uses the official PVPC integration which handles rate limits
-- **Octopus Energy API**: Standard rate limits apply
-- **Web scraping**: Limited to avoid overloading servers (cached for 1 week)
+- **Octopus Energy España Account**: Required for consumption and billing data access.
+- **PVPC Hourly Pricing Integration**: Required for market-based tariffs only. See [installation instructions](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/).
 
 ## 🌍 Timezone Handling
 
