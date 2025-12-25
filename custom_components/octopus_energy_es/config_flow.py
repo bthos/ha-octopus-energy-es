@@ -11,9 +11,9 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    CONF_DISCOUNT_START_HOUR,
     CONF_DISCOUNT_END_HOUR,
     CONF_DISCOUNT_PERCENTAGE,
+    CONF_DISCOUNT_START_HOUR,
     CONF_FIXED_RATE,
     CONF_MANAGEMENT_FEE_MONTHLY,
     CONF_P1_HOURS_WEEKDAYS,
@@ -58,67 +58,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
-        return await self.async_step_pricing_model(user_input)
-
-    async def async_step_pricing_model(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle pricing model selection."""
-        if user_input is not None:
-            self._pricing_model = user_input[CONF_PRICING_MODEL]
-            self._data[CONF_PRICING_MODEL] = self._pricing_model
-            
-            if self._pricing_model == PRICING_MODEL_FIXED:
-                return await self.async_step_time_structure()
-            else:
-                # Market pricing - skip time structure step
-                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
-                self._data[CONF_TIME_STRUCTURE] = self._time_structure
-                return await self.async_step_octopus_credentials()
-
-        return self.async_show_form(
-            step_id="pricing_model",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_PRICING_MODEL): vol.In(
-                        {
-                            PRICING_MODEL_FIXED: "Fixed (Fixed rates for 12 months)",
-                            PRICING_MODEL_MARKET: "Market (Variable market-based pricing)",
-                        }
-                    )
-                }
-            ),
-        )
-
-    async def async_step_time_structure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle time structure selection (for Fixed pricing)."""
-        if user_input is not None:
-            self._time_structure = user_input[CONF_TIME_STRUCTURE]
-            self._data[CONF_TIME_STRUCTURE] = self._time_structure
-            return await self.async_step_octopus_credentials()
-
-        return self.async_show_form(
-            step_id="time_structure",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_TIME_STRUCTURE): vol.In(
-                        {
-                            TIME_STRUCTURE_SINGLE_RATE: "Single Rate (Same price 24h)",
-                            TIME_STRUCTURE_TIME_OF_USE: "Time-of-Use (P1/P2/P3 periods)",
-                        }
-                    )
-                }
-            ),
-            description_placeholders={
-                "period_info": (
-                    "P1 (Punta): 11-14, 19-22 weekdays\n"
-                    "P2 (Llano): 9-10, 15-18, 23 weekdays\n"
-                    "P3 (Valle): 0-8 weekdays, all hours weekends/holidays"
-                ),
-            },
-        )
+        return await self.async_step_octopus_credentials(user_input)
 
     async def async_step_octopus_credentials(
         self, user_input: dict[str, Any] | None = None
@@ -127,21 +67,25 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # If user skipped credentials (API not available), allow it
-            if not user_input.get(CONF_EMAIL) and not user_input.get(CONF_PASSWORD):
-                # User can skip if they only want price data
-                _LOGGER.info("Skipping Octopus Energy credentials - using price data only")
-                return await self.async_step_energy_rates()
             # Validate credentials by attempting to authenticate
             try:
                 from .api.octopus_client import OctopusClient, OctopusClientError
                 
-                email = user_input.get(CONF_EMAIL, "")
+                email = user_input.get(CONF_EMAIL, "").strip()
                 password = user_input.get(CONF_PASSWORD, "")
                 
                 if not email or not password:
-                    # No credentials provided - skip to energy rates
-                    return await self.async_step_energy_rates()
+                    errors["base"] = "email_password_required"
+                    return self.async_show_form(
+                        step_id="octopus_credentials",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required(CONF_EMAIL, default=email): str,
+                                vol.Required(CONF_PASSWORD): str,
+                            }
+                        ),
+                        errors=errors,
+                    )
                 
                 # Try to authenticate (property_id not needed for auth)
                 # Use a dummy property_id just for authentication
@@ -150,30 +94,44 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await test_client._authenticate()
                 except OctopusClientError as err:
                     error_msg = str(err).lower()
-                    # Check for API not available errors
+                    await test_client.close()
+                    # Handle authentication errors
                     if any(phrase in error_msg for phrase in [
+                        "401", 
+                        "invalid", 
+                        "credentials", 
+                        "incorrect",
+                        "wrong",
+                        "please make sure",
+                        "please check",
+                        "kt-ct-1138"  # GraphQL error code for invalid credentials
+                    ]):
+                        errors["base"] = "invalid_auth"
+                    elif any(phrase in error_msg for phrase in [
+                        "cannot_connect", 
+                        "connection", 
+                        "network", 
+                        "timeout",
                         "not available", 
                         "not be publicly", 
                         "domain name not found",
                         "cannot connect to host",
                         "name or service not known"
                     ]):
-                        # API doesn't exist - this is OK, we can still use price data
-                        _LOGGER.warning(
-                            "Octopus Energy España API is not publicly available. "
-                            "The integration will work for price data only. "
-                            "Consumption and billing features will not be available."
-                        )
-                        # Store credentials anyway - user might want to use them later
-                        # or the API might become available
-                        self._data[CONF_EMAIL] = email
-                        self._data[CONF_PASSWORD] = password
-                        await test_client.close()
-                        return await self.async_step_energy_rates()
+                        errors["base"] = "cannot_connect"
                     else:
-                        # Other authentication error - re-raise
-                        await test_client.close()
-                        raise
+                        errors["base"] = "unknown"
+                    
+                    return self.async_show_form(
+                        step_id="octopus_credentials",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required(CONF_EMAIL, default=email): str,
+                                vol.Required(CONF_PASSWORD): str,
+                            }
+                        ),
+                        errors=errors,
+                    )
                 
                 # Try to fetch properties list
                 properties = await test_client.fetch_properties()
@@ -190,7 +148,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         prop = properties[0]
                         # Use account number as property_id
                         self._data[CONF_PROPERTY_ID] = prop.get("number") or prop.get("id") or str(prop)
-                        return await self.async_step_energy_rates()
+                        return await self.async_step_pricing_model()
                     else:
                         # Multiple accounts - show selection step
                         return await self.async_step_select_property()
@@ -203,63 +161,15 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._data[CONF_PASSWORD] = password
                     return await self.async_step_manual_account()
                 
-            except OctopusClientError as err:
-                error_msg = str(err).lower()
-                # Check if this is an API not available error
-                if any(phrase in error_msg for phrase in [
-                    "not available", 
-                    "not be publicly", 
-                    "domain name not found",
-                    "cannot connect to host",
-                    "name or service not known"
-                ]):
-                    # API doesn't exist - allow user to proceed with price data only
-                    _LOGGER.warning(
-                        "Octopus Energy España API is not publicly available. "
-                        "The integration will work for price data only. "
-                        "Consumption and billing features will not be available."
-                    )
-                    # Store credentials if provided
-                    if user_input.get(CONF_EMAIL) and user_input.get(CONF_PASSWORD):
-                        self._data[CONF_EMAIL] = user_input[CONF_EMAIL]
-                        self._data[CONF_PASSWORD] = user_input[CONF_PASSWORD]
-                    return await self.async_step_energy_rates()
-                
-                # Other authentication errors - provide user-friendly messages
-                _LOGGER.error("Error validating credentials: %s", err)
-                # Check for invalid credentials errors (including GraphQL validation errors)
-                if any(phrase in error_msg for phrase in [
-                    "401", 
-                    "invalid", 
-                    "credentials", 
-                    "incorrect",
-                    "wrong",
-                    "please make sure",
-                    "please check",
-                    "kt-ct-1138"  # GraphQL error code for invalid credentials
-                ]):
-                    errors["base"] = "invalid_auth"
-                elif any(phrase in error_msg for phrase in [
-                    "cannot_connect", 
-                    "connection", 
-                    "network", 
-                    "timeout"
-                ]):
-                    errors["base"] = "cannot_connect"
-                else:
-                    errors["base"] = "unknown"
             except Exception as err:
                 _LOGGER.error("Unexpected error validating credentials: %s", err, exc_info=True)
                 errors["base"] = "unknown"
-            
-            # If there are errors, show the form again
-            if errors:
                 return self.async_show_form(
                     step_id="octopus_credentials",
                     data_schema=vol.Schema(
                         {
-                            vol.Optional(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
-                            vol.Optional(CONF_PASSWORD): str,
+                            vol.Required(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
+                            vol.Required(CONF_PASSWORD): str,
                         }
                     ),
                     errors=errors,
@@ -269,8 +179,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="octopus_credentials",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_EMAIL): str,
-                    vol.Optional(CONF_PASSWORD): str,
+                    vol.Required(CONF_EMAIL): str,
+                    vol.Required(CONF_PASSWORD): str,
                 }
             ),
             errors=errors,
@@ -282,7 +192,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle account selection when multiple accounts are available."""
         if user_input is not None:
             self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
-            return await self.async_step_energy_rates()
+            return await self.async_step_pricing_model()
 
         # Build options dict from accounts
         property_options = {}
@@ -311,7 +221,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             account_number = user_input.get(CONF_PROPERTY_ID, "").strip()
             if account_number:
                 self._data[CONF_PROPERTY_ID] = account_number
-                return await self.async_step_energy_rates()
+                return await self.async_step_pricing_model()
             else:
                 errors["base"] = "account_number_required"
 
@@ -323,6 +233,66 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_pricing_model(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle pricing model selection."""
+        if user_input is not None:
+            self._pricing_model = user_input[CONF_PRICING_MODEL]
+            self._data[CONF_PRICING_MODEL] = self._pricing_model
+            
+            if self._pricing_model == PRICING_MODEL_FIXED:
+                return await self.async_step_time_structure()
+            else:
+                # Market pricing - skip time structure step
+                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                self._data[CONF_TIME_STRUCTURE] = self._time_structure
+                return await self.async_step_energy_rates()
+
+        return self.async_show_form(
+            step_id="pricing_model",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PRICING_MODEL): vol.In(
+                        {
+                            PRICING_MODEL_FIXED: "Fixed (Fixed rates for 12 months)",
+                            PRICING_MODEL_MARKET: "Market (Variable market-based pricing)",
+                        }
+                    )
+                }
+            ),
+        )
+
+    async def async_step_time_structure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle time structure selection (for Fixed pricing)."""
+        if user_input is not None:
+            self._time_structure = user_input[CONF_TIME_STRUCTURE]
+            self._data[CONF_TIME_STRUCTURE] = self._time_structure
+            return await self.async_step_energy_rates()
+
+        return self.async_show_form(
+            step_id="time_structure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TIME_STRUCTURE): vol.In(
+                        {
+                            TIME_STRUCTURE_SINGLE_RATE: "Single Rate (Same price 24h)",
+                            TIME_STRUCTURE_TIME_OF_USE: "Time-of-Use (P1/P2/P3 periods)",
+                        }
+                    )
+                }
+            ),
+            description_placeholders={
+                "period_info": (
+                    "P1 (Punta): 11-14, 19-22 weekdays\n"
+                    "P2 (Llano): 9-10, 15-18, 23 weekdays\n"
+                    "P3 (Valle): 0-8 weekdays, all hours weekends/holidays"
+                ),
+            },
         )
 
     async def async_step_energy_rates(
@@ -419,7 +389,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_DISCOUNT_START_HOUR] = user_input.get(CONF_DISCOUNT_START_HOUR)
                 self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
                 self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
-            return await self.async_step_pvpc_sensor()
+            
+            # Check if we need PVPC sensor (only for market pricing)
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            if pricing_model == PRICING_MODEL_MARKET:
+                return await self.async_step_pvpc_sensor()
+            else:
+                # Fixed pricing - skip PVPC sensor and create entry
+                return self._create_entry()
 
         return self.async_show_form(
             step_id="discount_programs",
@@ -442,19 +419,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_pvpc_sensor(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle PVPC sensor selection."""
+        """Handle PVPC sensor selection (only for market pricing)."""
         if user_input is not None:
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
-            
-            # Generate title based on pricing model
-            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-            model_name = "Fixed" if pricing_model == PRICING_MODEL_FIXED else "Market"
-            
-            return self.async_create_entry(
-                title=f"Octopus Energy España - {model_name}",
-                data=self._data,
-            )
+            return self._create_entry()
 
         return self.async_show_form(
             step_id="pvpc_sensor",
@@ -465,3 +434,17 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    def _create_entry(self) -> FlowResult:
+        """Create the config entry."""
+        # Generate title based on pricing model
+        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        model_name = "Fixed" if pricing_model == PRICING_MODEL_FIXED else "Market"
+        
+        # Set default PVPC sensor for market pricing if not set
+        if pricing_model == PRICING_MODEL_MARKET and CONF_PVPC_SENSOR not in self._data:
+            self._data[CONF_PVPC_SENSOR] = "sensor.pvpc"
+        
+        return self.async_create_entry(
+            title=f"Octopus Energy España - {model_name}",
+            data=self._data,
+        )
