@@ -81,6 +81,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._billing_data: dict[str, Any] = {}
         self._credits_data: dict[str, Any] = {}
         self._account_data: dict[str, Any] = {}
+        self._historical_data: list[dict[str, Any]] = []
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
@@ -222,11 +223,17 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Error updating account info: %s", err)
                 # Account info is optional, don't fail
 
+        # Merge historical data with recent consumption data
+        merged_consumption = self._merge_consumption_data(
+            self._consumption_data or [],
+            self._historical_data or []
+        )
+        
         # Always return a dict, even if empty, so sensors don't fail
         result = {
             "today_prices": self._today_prices or [],
             "tomorrow_prices": self._tomorrow_prices or [],
-            "consumption": self._consumption_data or [],
+            "consumption": merged_consumption,
             "billing": self._billing_data or {},
             "credits": self._credits_data or {},
             "account": self._account_data or {},

@@ -190,22 +190,54 @@ async def _store_historical_data_in_recorder(
     """
     Store historical consumption data in Home Assistant recorder.
     
-    This creates state changes for historical data points, which will be
-    recorded by Home Assistant's recorder for historical queries.
+    Historical data is stored in the coordinator and will be accessible to sensors.
+    Home Assistant recorder automatically stores sensor state changes as they occur.
+    Since sensors now have access to historical data via coordinator.data["consumption"],
+    the recorder will store the sensor states when they update.
     
-    Note: Home Assistant recorder automatically stores state changes as they occur.
-    For historical data that's already in the past, we log that it's available.
-    The data can be accessed via the coordinator for sensor queries.
+    Note: Home Assistant doesn't support importing historical state changes with past
+    timestamps directly. The historical data will be available for sensors to query
+    and display, and future sensor updates will be recorded normally.
     """
-    _LOGGER.info(
-        "Historical data loaded: %d measurements available for historical queries",
-        len(historical_data)
-    )
+    if not historical_data:
+        return
     
-    # Historical data is stored in coordinator and can be accessed by sensors
-    # Home Assistant recorder will store current sensor states automatically
-    # For true historical storage with timestamps, we would need to use
-    # recorder's import_statistics API or create dedicated historical entities
+    # Calculate date range for logging
+    dates: list[date] = []
+    for item in historical_data:
+        if isinstance(item, dict):
+            timestamp_str = item.get("start_time") or item.get("datetime") or item.get("date")
+            if timestamp_str:
+                try:
+                    from zoneinfo import ZoneInfo
+                    dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                    dt_madrid = dt.astimezone(ZoneInfo("Europe/Madrid"))
+                    dates.append(dt_madrid.date())
+                except (ValueError, TypeError):
+                    continue
+    
+    if dates:
+        dates.sort()
+        start_date = dates[0].isoformat()
+        end_date = dates[-1].isoformat()
+        _LOGGER.info(
+            "Historical data loaded: %d measurements from %s to %s. "
+            "Data is now available to sensors and will be recorded on next sensor update.",
+            len(historical_data),
+            start_date,
+            end_date
+        )
+    else:
+        _LOGGER.info(
+            "Historical data loaded: %d measurements available for sensor queries",
+            len(historical_data)
+        )
+    
+    # Historical data is stored in coordinator._historical_data
+    # Sensors will access it via coordinator.data["consumption"] after merging
+    # Home Assistant recorder will store sensor states automatically when sensors update
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
