@@ -1,7 +1,5 @@
 {
   "name": "Octopus Energy España",
-  "domains": ["sensor"],
-  "iot_class": "Cloud Polling",
   "homeassistant": "2023.1.0",
   "country": "ES",
   "render_readme": true
