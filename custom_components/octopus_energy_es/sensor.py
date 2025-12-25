@@ -25,6 +25,7 @@ from .const import (
     CONF_DISCOUNT_PERCENTAGE,
     CONF_DISCOUNT_START_HOUR,
     CONF_MANAGEMENT_FEE_MONTHLY,
+    CONF_OTHER_CONCEPTS_RATE,
     DOMAIN,
     TIMEZONE_MADRID,
 )
@@ -173,6 +174,14 @@ ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:account",
 )
 
+NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="next_invoice_estimated",
+    name="Octopus Energy España Next Invoice Estimated",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:receipt-text",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -205,6 +214,7 @@ async def async_setup_entry(
         ),
         OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
+        OctopusEnergyESNextInvoiceEstimatedSensor(coordinator, NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
         OctopusEnergyESCreditsSensor(
             coordinator, CREDITS_SENSOR_DESCRIPTION
@@ -1007,6 +1017,274 @@ class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
             return invoices[0].get("amount")
 
         return None
+
+
+class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
+    """Next invoice estimated sensor."""
+
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the next invoice estimated sensor."""
+        super().__init__(coordinator, description)
+        self._estimated_breakdown: dict[str, float] | None = None
+        self._period_start: date | None = None
+        self._period_end: date | None = None
+        self._days_elapsed: int = 0
+        self._days_remaining: int = 0
+
+    def _calculate_daily_energy_cost(
+        self, target_date: date, consumption: list[dict[str, Any]], prices: list[dict[str, Any]]
+    ) -> float:
+        """Calculate energy cost for a specific day using DailyCostSensor logic."""
+        # Group consumption by hour for the target date
+        hourly_consumption: dict[int, float] = {}
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid.date() == target_date:
+                        hour = item_dt_madrid.hour
+                        if hour not in hourly_consumption:
+                            hourly_consumption[hour] = 0.0
+                        hourly_consumption[hour] += float(item.get("consumption", item.get("value", 0)))
+
+        # Match hourly consumption with hourly prices
+        energy_cost = 0.0
+        matched_hours = 0
+        for hour, consumption_value in hourly_consumption.items():
+            # Find matching price for this hour
+            for price in prices:
+                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                if price_dt_madrid and price_dt_madrid.date() == target_date and price_dt_madrid.hour == hour:
+                    energy_cost += consumption_value * price.get("price_per_kwh", 0)
+                    matched_hours += 1
+                    break
+
+        # If we couldn't match hourly consumption with hourly prices,
+        # fall back to using daily total consumption and average price
+        if matched_hours == 0:
+            # Calculate daily total consumption
+            daily_consumption = sum(hourly_consumption.values())
+            
+            # Get prices for the target date
+            daily_prices: list[float] = []
+            for price in prices:
+                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                if price_dt_madrid and price_dt_madrid.date() == target_date:
+                    daily_prices.append(price.get("price_per_kwh", 0))
+
+            if daily_prices:
+                # Calculate average price for the day
+                avg_price = sum(daily_prices) / len(daily_prices)
+                energy_cost = daily_consumption * avg_price
+
+        return energy_cost
+
+    @property
+    def native_value(self) -> float | None:
+        """Return estimated next invoice amount."""
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+        consumption = data.get("consumption", [])
+        prices = data.get("today_prices", [])
+        tomorrow_prices = data.get("tomorrow_prices", [])
+
+        # Reset state
+        self._estimated_breakdown = None
+        self._period_start = None
+        self._period_end = None
+        self._days_elapsed = 0
+        self._days_remaining = 0
+
+        # Check if we have required data
+        if not billing or not consumption or not prices:
+            return None
+
+        last_invoice = billing.get("last_invoice")
+        if not last_invoice or not isinstance(last_invoice, dict):
+            return None
+
+        # Calculate next billing period
+        start_str = last_invoice.get("start")
+        end_str = last_invoice.get("end")
+
+        if not start_str or not end_str:
+            return None
+
+        try:
+            # Parse dates (they should be ISO format strings)
+            last_start = datetime.fromisoformat(start_str.replace("Z", "+00:00")).date()
+            last_end = datetime.fromisoformat(end_str.replace("Z", "+00:00")).date()
+        except (ValueError, AttributeError):
+            return None
+
+        # Calculate next period
+        period_duration = (last_end - last_start).days + 1
+        next_start = last_end + timedelta(days=1)
+        next_end = next_start + timedelta(days=period_duration - 1)
+
+        # Handle month boundaries - if next_end goes beyond month end, adjust
+        if next_end.month != next_start.month:
+            # Get last day of next_start's month
+            if next_start.month == 12:
+                last_day = datetime(next_start.year + 1, 1, 1).date() - timedelta(days=1)
+            else:
+                last_day = datetime(next_start.year, next_start.month + 1, 1).date() - timedelta(days=1)
+            next_end = last_day
+
+        self._period_start = next_start
+        self._period_end = next_end
+
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
+
+        # Check if we're in the billing period
+        if today < next_start:
+            # We're before the period starts, return None
+            return None
+
+        # Calculate days elapsed and remaining
+        if today > next_end:
+            # Period has ended, use full period
+            days_elapsed = period_duration
+            days_remaining = 0
+        else:
+            days_elapsed = (today - next_start).days + 1
+            days_remaining = (next_end - today).days
+
+        self._days_elapsed = days_elapsed
+        self._days_remaining = days_remaining
+
+        # Calculate actual energy costs for days elapsed
+        actual_energy_cost = 0.0
+        total_consumption_so_far = 0.0
+
+        for day_offset in range(days_elapsed):
+            check_date = next_start + timedelta(days=day_offset)
+            if check_date > today:
+                break
+
+            # Calculate energy cost for this day
+            day_cost = self._calculate_daily_energy_cost(check_date, consumption, prices)
+            actual_energy_cost += day_cost
+
+            # Sum consumption for average calculation
+            for item in consumption:
+                if isinstance(item, dict):
+                    item_time_str = item.get("start_time") or item.get("date")
+                    if item_time_str:
+                        item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                        if item_dt_madrid and item_dt_madrid.date() == check_date:
+                            total_consumption_so_far += float(item.get("consumption", item.get("value", 0)))
+
+        # Calculate average daily consumption
+        if days_elapsed > 0:
+            avg_daily_consumption = total_consumption_so_far / days_elapsed
+        else:
+            # No days elapsed, use last month's average if available
+            # For now, return None if no data
+            return None
+
+        # Project future energy costs for remaining days
+        projected_energy_cost = 0.0
+        all_prices = prices + tomorrow_prices
+
+        for day_offset in range(days_remaining):
+            check_date = today + timedelta(days=day_offset + 1)
+            if check_date > next_end:
+                break
+
+            # Get prices for this day (use today's prices, tomorrow's, or repeat pattern)
+            day_prices: list[float] = []
+            for price in all_prices:
+                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                if price_dt_madrid and price_dt_madrid.date() == check_date:
+                    day_prices.append(price.get("price_per_kwh", 0))
+
+            # If no prices for this specific day, use average of available prices
+            if not day_prices:
+                if prices:
+                    day_prices = [p.get("price_per_kwh", 0) for p in prices if p.get("price_per_kwh") is not None]
+                elif tomorrow_prices:
+                    day_prices = [p.get("price_per_kwh", 0) for p in tomorrow_prices if p.get("price_per_kwh") is not None]
+
+            if day_prices:
+                avg_price = sum(day_prices) / len(day_prices)
+                projected_energy_cost += avg_daily_consumption * avg_price
+
+        # Calculate power costs for full period
+        entry = self.coordinator._entry
+        power_kw = entry.data.get("power_kw")
+        power_cost_total = 0.0
+        if power_kw is not None:
+            tariff_calculator = self.coordinator._tariff_calculator
+            for day_offset in range(period_duration):
+                check_date = next_start + timedelta(days=day_offset)
+                power_cost_dict = tariff_calculator.calculate_power_cost(float(power_kw), check_date)
+                power_cost_total += power_cost_dict.get("total_cost", 0.0)
+
+        # Get management fee (already monthly)
+        management_fee = 0.0
+        management_fee_monthly = entry.data.get(CONF_MANAGEMENT_FEE_MONTHLY)
+        if management_fee_monthly is not None:
+            management_fee = float(management_fee_monthly)
+
+        # Calculate other concepts for full period
+        other_concepts = 0.0
+        other_concepts_rate = entry.data.get(CONF_OTHER_CONCEPTS_RATE)
+        if other_concepts_rate is not None:
+            other_concepts = float(other_concepts_rate) * period_duration
+
+        # Calculate base total (before taxes)
+        base_total = actual_energy_cost + projected_energy_cost + power_cost_total + management_fee + other_concepts
+
+        # Apply taxes
+        tariff_calculator = self.coordinator._tariff_calculator
+        tariff_config = tariff_calculator._config
+        electricity_tax = base_total * tariff_config.electricity_tax_rate
+        vat_base = base_total + electricity_tax
+        vat = vat_base * tariff_config.vat_rate
+        total = base_total + electricity_tax + vat
+
+        # Store breakdown
+        self._estimated_breakdown = {
+            "actual_energy_cost": round(actual_energy_cost, 2),
+            "projected_energy_cost": round(projected_energy_cost, 2),
+            "power_cost": round(power_cost_total, 2),
+            "management_fee": round(management_fee, 2),
+            "other_concepts": round(other_concepts, 2),
+            "base_total": round(base_total, 2),
+            "electricity_tax": round(electricity_tax, 2),
+            "vat": round(vat, 2),
+            "total": round(total, 2),
+        }
+
+        return total
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+
+        if self._period_start:
+            attrs["period_start"] = self._period_start.isoformat()
+        if self._period_end:
+            attrs["period_end"] = self._period_end.isoformat()
+        attrs["days_elapsed"] = self._days_elapsed
+        attrs["days_remaining"] = self._days_remaining
+
+        if self._estimated_breakdown:
+            attrs["actual_energy_cost"] = self._estimated_breakdown.get("actual_energy_cost", 0)
+            attrs["projected_energy_cost"] = self._estimated_breakdown.get("projected_energy_cost", 0)
+            attrs["power_cost"] = self._estimated_breakdown.get("power_cost", 0)
+            attrs["management_fee"] = self._estimated_breakdown.get("management_fee", 0)
+            attrs["other_concepts"] = self._estimated_breakdown.get("other_concepts", 0)
+            attrs["base_total"] = self._estimated_breakdown.get("base_total", 0)
+            attrs["electricity_tax"] = self._estimated_breakdown.get("electricity_tax", 0)
+            attrs["vat"] = self._estimated_breakdown.get("vat", 0)
+            attrs["total"] = self._estimated_breakdown.get("total", 0)
+
+        return attrs
 
 
 class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
