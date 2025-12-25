@@ -69,26 +69,3 @@ SUN_CLUB_DISCOUNT = 0.45  # 45% discount
 CREDIT_REASON_SUN_CLUB = "SUN_CLUB"
 CREDIT_REASON_SUN_CLUB_POWER_UP = "SUN_CLUB_POWER_UP"
 
-# Historical data configuration
-CONF_LOAD_HISTORICAL_DATA = "load_historical_data"
-CONF_HISTORICAL_DATA_RANGE = "historical_data_range"
-CONF_HISTORICAL_DATA_START_DATE = "historical_data_start_date"
-CONF_HISTORICAL_DATA_LOADED = "historical_data_loaded"
-CONF_HISTORICAL_DATA_LOAD_DATE = "historical_data_load_date"
-
-# Historical data range options
-HISTORICAL_RANGE_1_YEAR = "1_year"
-HISTORICAL_RANGE_2_YEARS = "2_years"
-HISTORICAL_RANGE_ALL_AVAILABLE = "all_available"
-HISTORICAL_RANGE_CUSTOM = "custom"
-
-HISTORICAL_RANGE_OPTIONS = [
-    HISTORICAL_RANGE_1_YEAR,
-    HISTORICAL_RANGE_2_YEARS,
-    HISTORICAL_RANGE_ALL_AVAILABLE,
-    HISTORICAL_RANGE_CUSTOM,
-]
-
-# Default chunk size for historical data fetching (days)
-DEFAULT_HISTORICAL_CHUNK_SIZE_DAYS = 90
-

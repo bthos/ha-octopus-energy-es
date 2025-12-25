@@ -1,7 +1,6 @@
 {
   "domain": "octopus_energy_es",
   "name": "Octopus Energy España",
-  "after_dependencies": ["recorder"],
   "codeowners": ["@bthos"],
   "config_flow": true,
   "dependencies": [],
@@ -15,6 +14,6 @@
     "lxml>=4.9.0",
     "python-graphql-client>=0.4.3"
   ],
-  "version": "0.1.3"
+  "version": "0.1.4"
 }
 
