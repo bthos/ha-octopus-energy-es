@@ -80,14 +80,20 @@ jobs:
             echo "- No commits found" > changelog.txt
           fi
           
-          # Use a unique delimiter that won't appear in commit messages
-          # Generate a random delimiter using process ID and timestamp
-          DELIMITER="CHANGELOG_$$_$(date +%s)"
-          echo "changelog<<${DELIMITER}" >> $GITHUB_OUTPUT
-          cat changelog.txt >> $GITHUB_OUTPUT
-          echo "${DELIMITER}" >> $GITHUB_OUTPUT
+          # Ensure changelog ends with a newline
+          if [ -s changelog.txt ] && [ "$(tail -c1 changelog.txt)" != "" ]; then
+            echo "" >> changelog.txt
+          fi
           
-          echo "Generated changelog:"
+          # Use a unique delimiter - ensure it's on its own line
+          DELIMITER="CHANGELOG_END_$(date +%s)_$$"
+          {
+            printf "changelog<<%s\n" "${DELIMITER}"
+            cat changelog.txt
+            printf "%s\n" "${DELIMITER}"
+          } >> $GITHUB_OUTPUT
+          
+          echo "Changelog:"
           cat changelog.txt
 
       - name: Create release
