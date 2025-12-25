@@ -40,6 +40,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
         self._tariff_type: str | None = None
+        self._properties: list[dict[str, Any]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -80,26 +81,113 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            # If user skipped credentials (API not available), allow it
+            if not user_input.get(CONF_EMAIL) and not user_input.get(CONF_PASSWORD):
+                # User can skip if they only want price data
+                _LOGGER.info("Skipping Octopus Energy credentials - using price data only")
+                return await self.async_step_tariff_config()
             # Validate credentials by attempting to authenticate
             try:
                 from .api.octopus_client import OctopusClient, OctopusClientError
                 
-                email = user_input[CONF_EMAIL]
-                password = user_input[CONF_PASSWORD]
-                property_id = user_input[CONF_PROPERTY_ID]
+                email = user_input.get(CONF_EMAIL, "")
+                password = user_input.get(CONF_PASSWORD, "")
                 
-                # Try to authenticate
-                test_client = OctopusClient(email, password, property_id)
-                await test_client._authenticate()
+                if not email or not password:
+                    # No credentials provided - skip to tariff config
+                    return await self.async_step_tariff_config()
+                
+                # Try to authenticate (property_id not needed for auth)
+                # Use a dummy property_id just for authentication
+                test_client = OctopusClient(email, password, "dummy")
+                try:
+                    await test_client._authenticate()
+                except OctopusClientError as err:
+                    error_msg = str(err).lower()
+                    # Check for API not available errors
+                    if any(phrase in error_msg for phrase in [
+                        "not available", 
+                        "not be publicly", 
+                        "domain name not found",
+                        "cannot connect to host",
+                        "name or service not known"
+                    ]):
+                        # API doesn't exist - this is OK, we can still use price data
+                        _LOGGER.warning(
+                            "Octopus Energy Spain API is not publicly available. "
+                            "The integration will work for price data only. "
+                            "Consumption and billing features will not be available."
+                        )
+                        # Store credentials anyway - user might want to use them later
+                        # or the API might become available
+                        self._data[CONF_EMAIL] = email
+                        self._data[CONF_PASSWORD] = password
+                        # Property ID is not needed if API doesn't exist
+                        if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
+                            self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
+                        await test_client.close()
+                        return await self.async_step_tariff_config()
+                    else:
+                        # Other authentication error - re-raise
+                        await test_client.close()
+                        raise
+                
+                # Try to fetch properties list
+                properties = await test_client.fetch_properties()
                 await test_client.close()
                 
-                # Credentials are valid, store them
-                self._data.update(user_input)
-                return await self.async_step_tariff_config()
+                if properties:
+                    # If we found properties, store them and let user select
+                    self._data[CONF_EMAIL] = email
+                    self._data[CONF_PASSWORD] = password
+                    self._properties = properties
+                    
+                    # If only one account, auto-select it
+                    if len(properties) == 1:
+                        prop = properties[0]
+                        # Use account number as property_id
+                        self._data[CONF_PROPERTY_ID] = prop.get("number") or prop.get("id") or str(prop)
+                        return await self.async_step_tariff_config()
+                    else:
+                        # Multiple accounts - show selection step
+                        return await self.async_step_select_property()
+                else:
+                    # Couldn't fetch properties - ask user to enter property_id manually
+                    if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
+                        # User provided property_id, store it
+                        # We'll validate it when coordinator tries to fetch data
+                        self._data.update(user_input)
+                        return await self.async_step_tariff_config()
+                    else:
+                        # No property_id provided and couldn't fetch list
+                        errors["base"] = "property_id_required"
                 
             except OctopusClientError as err:
-                _LOGGER.error("Error validating credentials: %s", err)
                 error_msg = str(err).lower()
+                # Check if this is an API not available error
+                if any(phrase in error_msg for phrase in [
+                    "not available", 
+                    "not be publicly", 
+                    "domain name not found",
+                    "cannot connect to host",
+                    "name or service not known"
+                ]):
+                    # API doesn't exist - allow user to proceed with price data only
+                    _LOGGER.warning(
+                        "Octopus Energy Spain API is not publicly available. "
+                        "The integration will work for price data only. "
+                        "Consumption and billing features will not be available."
+                    )
+                    # Store credentials if provided
+                    if user_input.get(CONF_EMAIL) and user_input.get(CONF_PASSWORD):
+                        self._data[CONF_EMAIL] = user_input[CONF_EMAIL]
+                        self._data[CONF_PASSWORD] = user_input[CONF_PASSWORD]
+                        if CONF_PROPERTY_ID in user_input and user_input[CONF_PROPERTY_ID]:
+                            self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
+                    return await self.async_step_tariff_config()
+                
+                # Other authentication errors
+                _LOGGER.error("Error validating credentials: %s", err)
                 if "401" in error_msg or "invalid" in error_msg:
                     errors["base"] = "invalid_auth"
                 elif "cannot_connect" in error_msg or "connection" in error_msg or "network" in error_msg:
@@ -118,7 +206,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {
                             vol.Required(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
                             vol.Required(CONF_PASSWORD): str,
-                            vol.Required(CONF_PROPERTY_ID, default=user_input.get(CONF_PROPERTY_ID, "")): str,
+                            vol.Optional(CONF_PROPERTY_ID, default=user_input.get(CONF_PROPERTY_ID, "")): str,
                         }
                     ),
                     errors=errors,
@@ -128,12 +216,37 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="octopus_credentials",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Required(CONF_PROPERTY_ID): str,
+                    vol.Optional(CONF_EMAIL, description={"suggested_value": "Leave empty to skip (price data only)"}): str,
+                    vol.Optional(CONF_PASSWORD, description={"suggested_value": "Leave empty to skip (price data only)"}): str,
+                    vol.Optional(CONF_PROPERTY_ID, description={"suggested_value": "Leave empty to auto-detect"}): str,
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_select_property(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle account selection when multiple accounts are available."""
+        if user_input is not None:
+            self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
+            return await self.async_step_tariff_config()
+
+        # Build options dict from accounts
+        property_options = {}
+        for prop in self._properties:
+            # Use account number as ID
+            prop_id = prop.get("number") or prop.get("id") or str(prop)
+            prop_name = prop.get("name") or prop.get("address") or prop.get("description") or f"Account {prop_id}"
+            property_options[prop_id] = prop_name
+
+        return self.async_show_form(
+            step_id="select_property",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PROPERTY_ID): vol.In(property_options),
+                }
+            ),
         )
 
     async def async_step_tariff_config(

@@ -53,10 +53,16 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         self._omie_client = OMIEClient()
 
-        email = entry.data[CONF_EMAIL]
-        password = entry.data[CONF_PASSWORD]
-        property_id = entry.data[CONF_PROPERTY_ID]
-        self._octopus_client = OctopusClient(email, password, property_id)
+        # Octopus API may not be available - credentials are optional
+        email = entry.data.get(CONF_EMAIL)
+        password = entry.data.get(CONF_PASSWORD)
+        property_id = entry.data.get(CONF_PROPERTY_ID, "")
+        
+        if email and password:
+            self._octopus_client = OctopusClient(email, password, property_id)
+        else:
+            _LOGGER.info("Octopus Energy credentials not provided - using price data only")
+            self._octopus_client = None
 
         self._tariff_scraper = TariffScraper()
 
@@ -117,20 +123,39 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 # Don't fail if tomorrow's prices aren't available yet
 
         # Update consumption data (every 15 minutes)
-        try:
-            self._consumption_data = await self._octopus_client.fetch_consumption(
-                granularity="hourly"
-            )
-        except OctopusClientError as err:
-            _LOGGER.debug("Error updating consumption: %s", err)
-            # Consumption is optional, don't fail
+        # Note: Octopus Energy Spain API may not be publicly available
+        if self._octopus_client:
+            try:
+                self._consumption_data = await self._octopus_client.fetch_consumption(
+                    granularity="hourly"
+                )
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                if "not available" in error_msg or "not be publicly" in error_msg:
+                    _LOGGER.info(
+                        "Octopus Energy Spain API is not available. "
+                        "Consumption data will not be available. "
+                        "Price sensors will continue to work using market data."
+                    )
+                else:
+                    _LOGGER.debug("Error updating consumption: %s", err)
+                # Consumption is optional, don't fail
 
         # Update billing data (daily)
-        try:
-            self._billing_data = await self._octopus_client.fetch_billing()
-        except OctopusClientError as err:
-            _LOGGER.debug("Error updating billing: %s", err)
-            # Billing is optional, don't fail
+        if self._octopus_client:
+            try:
+                self._billing_data = await self._octopus_client.fetch_billing()
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                if "not available" in error_msg or "not be publicly" in error_msg:
+                    _LOGGER.info(
+                        "Octopus Energy Spain API is not available. "
+                        "Billing data will not be available. "
+                        "Price sensors will continue to work using market data."
+                    )
+                else:
+                    _LOGGER.debug("Error updating billing: %s", err)
+                # Billing is optional, don't fail
 
         # Always return a dict, even if empty, so sensors don't fail
         result = {
@@ -201,7 +226,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         """Shutdown coordinator and close clients."""
         await self._esios_client.close()
         await self._omie_client.close()
-        await self._octopus_client.close()
+        if self._octopus_client:
+            await self._octopus_client.close()
         await self._tariff_scraper.close()
         await super().async_shutdown()
 

@@ -46,7 +46,8 @@ MARKET_PUBLISH_HOUR = 14
 ESIOS_API_BASE_URL = "https://api.esios.ree.es"
 ESIOS_API_INDICATOR_PVPC = 1001  # PVPC hourly prices
 
-OCTOPUS_API_BASE_URL = "https://api.octopusenergy.es"
+# Octopus Energy Spain uses GraphQL API
+OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
 
 # Default timezone
 TIMEZONE_MADRID = "Europe/Madrid"

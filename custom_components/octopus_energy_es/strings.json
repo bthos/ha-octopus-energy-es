@@ -9,12 +9,19 @@
         }
       },
       "octopus_credentials": {
-        "title": "Octopus Energy Credentials",
-        "description": "Enter your Octopus Energy Spain account credentials",
+        "title": "Octopus Energy Credentials (Optional)",
+        "description": "Enter your Octopus Energy Spain account credentials.\n\n⚠️ Note: Octopus Energy Spain API may not be publicly available. If you see connection errors, you can skip this step - the integration will work for price data using market sources (ESIOS/OMIE).\n\nProperty ID is optional - if left empty, we'll try to auto-detect it after authentication.\n\nIf auto-detection fails, you can find your Property ID by:\n• Logging into octopusenergy.es and checking your contract details\n• Looking at your Octopus Energy invoice for contract/account number\n• Checking the Octopus Energy mobile app\n• It may be your CUPS code (20 characters) or a numeric contract ID",
         "data": {
-          "email": "Email",
-          "password": "Password",
-          "property_id": "Property ID"
+          "email": "Email (optional - leave empty to skip)",
+          "password": "Password (optional - leave empty to skip)",
+          "property_id": "Property ID (optional - leave empty to auto-detect)"
+        }
+      },
+      "select_property": {
+        "title": "Select Property",
+        "description": "Multiple properties found. Please select the property you want to monitor.",
+        "data": {
+          "property_id": "Property"
         }
       },
       "tariff_config": {
@@ -45,7 +52,8 @@
     },
     "error": {
       "cannot_connect": "Unable to connect to Octopus Energy API. Please check your internet connection and try again.",
-      "invalid_auth": "Invalid authentication credentials. Please check your email, password, and property ID.",
+      "invalid_auth": "Invalid authentication credentials. Please check your email and password.",
+      "property_id_required": "Could not automatically detect your property. Please enter your Property ID manually.",
       "unknown": "Unknown error occurred. Please check the logs for details."
     },
     "abort": {

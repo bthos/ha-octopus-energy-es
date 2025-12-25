@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import aiohttp
+from python_graphql_client import GraphqlClient
 from zoneinfo import ZoneInfo
 
 from ..const import OCTOPUS_API_BASE_URL, TIMEZONE_MADRID
@@ -43,49 +44,72 @@ class OctopusClient:
 
     async def _authenticate(self) -> str:
         """
-        Authenticate with Octopus Energy API and return auth token.
+        Authenticate with Octopus Energy Spain GraphQL API and return auth token.
 
-        Reference: octopus-spain-monitor implementation
+        Uses GraphQL mutation: obtainKrakenToken
         """
         if self._auth_token:
             return self._auth_token
 
-        session = await self._get_session()
-        url = f"{OCTOPUS_API_BASE_URL}/auth/login"
+        mutation = """
+           mutation obtainKrakenToken($input: ObtainJSONWebTokenInput!) {
+              obtainKrakenToken(input: $input) {
+                token
+              }
+            }
+        """
+        variables = {"input": {"email": self._email, "password": self._password}}
 
         try:
-            async with session.post(
-                url,
-                json={"email": self._email, "password": self._password},
-            ) as response:
-                if response.status == 401:
+            client = GraphqlClient(endpoint=OCTOPUS_API_BASE_URL)
+            response = await client.execute_async(mutation, variables)
+
+            if "errors" in response:
+                error_msg = str(response["errors"])
+                _LOGGER.error("GraphQL authentication error: %s", error_msg)
+                if "401" in error_msg or "invalid" in error_msg.lower() or "credentials" in error_msg.lower():
                     raise OctopusClientError("Invalid Octopus Energy credentials")
-                if response.status == 404:
-                    raise OctopusClientError("Octopus Energy API endpoint not found. API may have changed.")
-                response.raise_for_status()
+                raise OctopusClientError(f"Authentication failed: {error_msg}")
 
-                data = await response.json()
-                _LOGGER.debug("Octopus API auth response: %s", data)
-                
-                self._auth_token = data.get("token") or data.get("access_token") or data.get("accessToken")
+            if "data" not in response or "obtainKrakenToken" not in response["data"]:
+                _LOGGER.error("Unexpected authentication response: %s", response)
+                raise OctopusClientError("No auth token received from API")
 
-                if not self._auth_token:
-                    _LOGGER.error("No auth token in response: %s", data)
-                    raise OctopusClientError("No auth token received from API")
+            self._auth_token = response["data"]["obtainKrakenToken"]["token"]
 
-                return self._auth_token
+            if not self._auth_token:
+                _LOGGER.error("No auth token in response: %s", response)
+                raise OctopusClientError("No auth token received from API")
 
-        except aiohttp.ClientError as err:
+            _LOGGER.debug("Successfully authenticated with Octopus Energy Spain API")
+            return self._auth_token
+
+        except Exception as err:
+            if isinstance(err, OctopusClientError):
+                raise
+            error_msg = str(err)
+            if "Domain name not found" in error_msg or "Name or service not known" in error_msg:
+                _LOGGER.error(
+                    "Octopus Energy Spain API endpoint not found. "
+                    "The API may not be publicly available. "
+                    "Consumption and billing data will not be available. "
+                    "Price data will still work using market data sources."
+                )
+                raise OctopusClientError(
+                    "Octopus Energy Spain API is not available. "
+                    "This integration can still provide price data using market sources, "
+                    "but consumption and billing data will not be available."
+                ) from err
             _LOGGER.error("Network error authenticating: %s", err)
             raise OctopusClientError(f"Error authenticating: {err}") from err
 
-    async def _get_headers(self) -> dict[str, str]:
-        """Get request headers with authentication."""
+    async def _get_graphql_client(self) -> GraphqlClient:
+        """Get GraphQL client with authentication."""
         token = await self._authenticate()
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+        return GraphqlClient(
+            endpoint=OCTOPUS_API_BASE_URL,
+            headers={"authorization": token}
+        )
 
     async def fetch_consumption(
         self,
@@ -94,7 +118,10 @@ class OctopusClient:
         granularity: str = "hourly",
     ) -> list[dict[str, Any]]:
         """
-        Fetch consumption data.
+        Fetch consumption data using GraphQL.
+
+        Note: The GraphQL API may not support consumption queries directly.
+        This is a placeholder for future implementation.
 
         Args:
             start_date: Start date for consumption data
@@ -104,41 +131,11 @@ class OctopusClient:
         Returns:
             List of consumption data dictionaries
         """
-        if start_date is None:
-            start_date = datetime.now(self._timezone).date()
-        if end_date is None:
-            end_date = start_date
-
-        session = await self._get_session()
-        headers = await self._get_headers()
-
-        url = f"{OCTOPUS_API_BASE_URL}/consumption"
-        params = {
-            "property_id": self._property_id,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "granularity": granularity,
-        }
-
-        try:
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status == 401:
-                    # Token might be expired, try to re-authenticate
-                    self._auth_token = None
-                    headers = await self._get_headers()
-                    async with session.get(
-                        url, params=params, headers=headers
-                    ) as retry_response:
-                        retry_response.raise_for_status()
-                        data = await retry_response.json()
-                else:
-                    response.raise_for_status()
-                    data = await response.json()
-
-                return self._parse_consumption_response(data)
-
-        except aiohttp.ClientError as err:
-            raise OctopusClientError(f"Error fetching consumption: {err}") from err
+        # TODO: Implement GraphQL query for consumption data
+        # The reference implementation doesn't show consumption queries
+        # This may need to be implemented based on available GraphQL schema
+        _LOGGER.warning("Consumption data fetching not yet implemented for GraphQL API")
+        return []
 
     def _parse_consumption_response(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """Parse consumption API response."""
@@ -223,4 +220,46 @@ class OctopusClient:
         except aiohttp.ClientError as err:
             _LOGGER.debug("Error fetching tariff info: %s", err)
             return None
+
+    async def fetch_properties(self) -> list[dict[str, Any]]:
+        """
+        Fetch list of accounts for the authenticated user using GraphQL.
+
+        Returns:
+            List of account dictionaries with 'number' field
+        """
+        query = """
+             query getAccountNames{
+                viewer {
+                    accounts {
+                        ... on Account {
+                            number
+                        }
+                    }
+                }
+            }
+        """
+
+        try:
+            client = await self._get_graphql_client()
+            response = await client.execute_async(query)
+
+            if "errors" in response:
+                _LOGGER.error("GraphQL error fetching accounts: %s", response["errors"])
+                return []
+
+            if "data" not in response or "viewer" not in response["data"]:
+                _LOGGER.warning("Unexpected response format when fetching accounts")
+                return []
+
+            accounts = response["data"]["viewer"]["accounts"]
+            # Convert to list of dicts with 'id' field for compatibility
+            properties = [{"id": acc["number"], "number": acc["number"]} for acc in accounts]
+            
+            _LOGGER.debug("Found %d accounts", len(properties))
+            return properties
+
+        except Exception as err:
+            _LOGGER.error("Error fetching accounts: %s", err)
+            return []
 
