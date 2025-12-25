@@ -11,21 +11,32 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
+    CONF_DISCOUNT_START_HOUR,
+    CONF_DISCOUNT_END_HOUR,
+    CONF_DISCOUNT_PERCENTAGE,
+    CONF_FIXED_RATE,
+    CONF_MANAGEMENT_FEE_MONTHLY,
+    CONF_P1_HOURS_WEEKDAYS,
+    CONF_P1_RATE,
+    CONF_P2_HOURS_WEEKDAYS,
+    CONF_P2_RATE,
+    CONF_P3_HOURS_WEEKDAYS,
+    CONF_P3_RATE,
+    CONF_POWER_P1_RATE,
+    CONF_POWER_P2_RATE,
+    CONF_PRICING_MODEL,
     CONF_PVPC_SENSOR,
     CONF_PROPERTY_ID,
-    CONF_TARIFF_TYPE,
-    DEFAULT_P1_HOURS,
-    DEFAULT_P2_HOURS,
-    DEFAULT_P3_HOURS,
+    CONF_SOLAR_SURPLUS_RATE,
+    CONF_TIME_STRUCTURE,
+    DEFAULT_P1_HOURS_WEEKDAYS,
+    DEFAULT_P2_HOURS_WEEKDAYS,
+    DEFAULT_P3_HOURS_WEEKDAYS,
     DOMAIN,
-    SUN_CLUB_DAYLIGHT_END,
-    SUN_CLUB_DAYLIGHT_START,
-    TARIFF_TYPE_FLEXI,
-    TARIFF_TYPE_GO,
-    TARIFF_TYPE_RELAX,
-    TARIFF_TYPE_SOLAR,
-    TARIFF_TYPE_SUN_CLUB,
-    TARIFF_TYPES,
+    PRICING_MODEL_FIXED,
+    PRICING_MODEL_MARKET,
+    TIME_STRUCTURE_SINGLE_RATE,
+    TIME_STRUCTURE_TIME_OF_USE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,39 +50,74 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
-        self._tariff_type: str | None = None
+        self._pricing_model: str | None = None
+        self._time_structure: str | None = None
         self._properties: list[dict[str, Any]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
-        return await self.async_step_tariff_type(user_input)
+        return await self.async_step_pricing_model(user_input)
 
-    async def async_step_tariff_type(
+    async def async_step_pricing_model(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle tariff type selection."""
+        """Handle pricing model selection."""
         if user_input is not None:
-            self._tariff_type = user_input[CONF_TARIFF_TYPE]
-            self._data[CONF_TARIFF_TYPE] = self._tariff_type
-            return await self.async_step_octopus_credentials()
+            self._pricing_model = user_input[CONF_PRICING_MODEL]
+            self._data[CONF_PRICING_MODEL] = self._pricing_model
+            
+            if self._pricing_model == PRICING_MODEL_FIXED:
+                return await self.async_step_time_structure()
+            else:
+                # Market pricing - skip time structure step
+                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                self._data[CONF_TIME_STRUCTURE] = self._time_structure
+                return await self.async_step_octopus_credentials()
 
         return self.async_show_form(
-            step_id="tariff_type",
+            step_id="pricing_model",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_TARIFF_TYPE): vol.In(
+                    vol.Required(CONF_PRICING_MODEL): vol.In(
                         {
-                            TARIFF_TYPE_FLEXI: "Octopus Flexi (Variable Market Price)",
-                            TARIFF_TYPE_RELAX: "Octopus Relax (Fixed Price)",
-                            TARIFF_TYPE_SOLAR: "Octopus Solar (Time-of-Use)",
-                            TARIFF_TYPE_GO: "Octopus Go (EV Tariff)",
-                            TARIFF_TYPE_SUN_CLUB: "SUN CLUB (Daylight Discount)",
+                            PRICING_MODEL_FIXED: "Fixed (Fixed rates for 12 months)",
+                            PRICING_MODEL_MARKET: "Market (Variable market-based pricing)",
                         }
                     )
                 }
             ),
+        )
+
+    async def async_step_time_structure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle time structure selection (for Fixed pricing)."""
+        if user_input is not None:
+            self._time_structure = user_input[CONF_TIME_STRUCTURE]
+            self._data[CONF_TIME_STRUCTURE] = self._time_structure
+            return await self.async_step_octopus_credentials()
+
+        return self.async_show_form(
+            step_id="time_structure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TIME_STRUCTURE): vol.In(
+                        {
+                            TIME_STRUCTURE_SINGLE_RATE: "Single Rate (Same price 24h)",
+                            TIME_STRUCTURE_TIME_OF_USE: "Time-of-Use (P1/P2/P3 periods)",
+                        }
+                    )
+                }
+            ),
+            description_placeholders={
+                "period_info": (
+                    "P1 (Punta): 11-14, 19-22 weekdays\n"
+                    "P2 (Llano): 9-10, 15-18, 23 weekdays\n"
+                    "P3 (Valle): 0-8 weekdays, all hours weekends/holidays"
+                ),
+            },
         )
 
     async def async_step_octopus_credentials(
@@ -85,7 +131,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not user_input.get(CONF_EMAIL) and not user_input.get(CONF_PASSWORD):
                 # User can skip if they only want price data
                 _LOGGER.info("Skipping Octopus Energy credentials - using price data only")
-                return await self.async_step_tariff_config()
+                return await self.async_step_energy_rates()
             # Validate credentials by attempting to authenticate
             try:
                 from .api.octopus_client import OctopusClient, OctopusClientError
@@ -94,8 +140,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password = user_input.get(CONF_PASSWORD, "")
                 
                 if not email or not password:
-                    # No credentials provided - skip to tariff config
-                    return await self.async_step_tariff_config()
+                    # No credentials provided - skip to energy rates
+                    return await self.async_step_energy_rates()
                 
                 # Try to authenticate (property_id not needed for auth)
                 # Use a dummy property_id just for authentication
@@ -123,7 +169,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self._data[CONF_EMAIL] = email
                         self._data[CONF_PASSWORD] = password
                         await test_client.close()
-                        return await self.async_step_tariff_config()
+                        return await self.async_step_energy_rates()
                     else:
                         # Other authentication error - re-raise
                         await test_client.close()
@@ -144,7 +190,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         prop = properties[0]
                         # Use account number as property_id
                         self._data[CONF_PROPERTY_ID] = prop.get("number") or prop.get("id") or str(prop)
-                        return await self.async_step_tariff_config()
+                        return await self.async_step_energy_rates()
                     else:
                         # Multiple accounts - show selection step
                         return await self.async_step_select_property()
@@ -177,7 +223,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if user_input.get(CONF_EMAIL) and user_input.get(CONF_PASSWORD):
                         self._data[CONF_EMAIL] = user_input[CONF_EMAIL]
                         self._data[CONF_PASSWORD] = user_input[CONF_PASSWORD]
-                    return await self.async_step_tariff_config()
+                    return await self.async_step_energy_rates()
                 
                 # Other authentication errors - provide user-friendly messages
                 _LOGGER.error("Error validating credentials: %s", err)
@@ -236,7 +282,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle account selection when multiple accounts are available."""
         if user_input is not None:
             self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
-            return await self.async_step_tariff_config()
+            return await self.async_step_energy_rates()
 
         # Build options dict from accounts
         property_options = {}
@@ -265,7 +311,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             account_number = user_input.get(CONF_PROPERTY_ID, "").strip()
             if account_number:
                 self._data[CONF_PROPERTY_ID] = account_number
-                return await self.async_step_tariff_config()
+                return await self.async_step_energy_rates()
             else:
                 errors["base"] = "account_number_required"
 
@@ -279,55 +325,118 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_tariff_config(
+    async def async_step_energy_rates(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle tariff-specific configuration."""
+        """Handle energy rates configuration."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_pvpc_sensor()
+            return await self.async_step_power_rates()
 
-        tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE)
-
-        if tariff_type == TARIFF_TYPE_FLEXI:
-            # No configuration needed for Flexi
-            return await self.async_step_pvpc_sensor()
+        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
 
         schema_dict: dict[str, Any] = {}
 
-        if tariff_type == TARIFF_TYPE_RELAX:
-            schema_dict[vol.Required("fixed_rate")] = vol.Coerce(float)
-
-        elif tariff_type == TARIFF_TYPE_SOLAR:
-            schema_dict[vol.Required("p1_rate")] = vol.Coerce(float)
-            schema_dict[vol.Required("p2_rate")] = vol.Coerce(float)
-            schema_dict[vol.Required("p3_rate")] = vol.Coerce(float)
-            schema_dict[vol.Optional("solar_surplus_rate", default=0.04)] = vol.Coerce(
-                float
-            )
-
-        elif tariff_type == TARIFF_TYPE_GO:
-            schema_dict[vol.Required("p1_rate")] = vol.Coerce(float)
-            schema_dict[vol.Required("p2_rate")] = vol.Coerce(float)
-            schema_dict[vol.Required("p3_rate")] = vol.Coerce(float)
-
-        elif tariff_type == TARIFF_TYPE_SUN_CLUB:
-            schema_dict[vol.Optional("daylight_start", default=SUN_CLUB_DAYLIGHT_START)] = (
-                vol.All(vol.Coerce(int), vol.Range(min=0, max=23))
-            )
-            schema_dict[vol.Optional("daylight_end", default=SUN_CLUB_DAYLIGHT_END)] = (
-                vol.All(vol.Coerce(int), vol.Range(min=0, max=23))
-            )
-            schema_dict[vol.Optional("discount_percentage", default=0.45)] = vol.All(
-                vol.Coerce(float), vol.Range(min=0, max=1)
-            )
+        if pricing_model == PRICING_MODEL_FIXED:
+            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                schema_dict[vol.Required(CONF_FIXED_RATE)] = vol.Coerce(float)
+            elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
+                schema_dict[vol.Required(CONF_P1_RATE)] = vol.Coerce(float)
+                schema_dict[vol.Required(CONF_P2_RATE)] = vol.Coerce(float)
+                schema_dict[vol.Required(CONF_P3_RATE)] = vol.Coerce(float)
+        else:
+            # Market pricing - optional management fee
+            schema_dict[vol.Optional(CONF_MANAGEMENT_FEE_MONTHLY)] = vol.Coerce(float)
 
         return self.async_show_form(
-            step_id="tariff_config",
+            step_id="energy_rates",
             data_schema=vol.Schema(schema_dict),
             errors=errors,
+        )
+
+    async def async_step_power_rates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle power rates configuration (always required)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_solar_features()
+
+        return self.async_show_form(
+            step_id="power_rates",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_POWER_P1_RATE): vol.Coerce(float),
+                    vol.Required(CONF_POWER_P2_RATE): vol.Coerce(float),
+                }
+            ),
+            description_placeholders={
+                "power_info": (
+                    "Power rates (Potencia) are always time-of-use:\n"
+                    "P1 (Punta): Same hours as energy P1\n"
+                    "P2 (Valle): Combines energy P2 + P3 hours"
+                ),
+            },
+            errors=errors,
+        )
+
+    async def async_step_solar_features(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle solar features configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_solar"):
+                self._data[CONF_SOLAR_SURPLUS_RATE] = user_input.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
+            return await self.async_step_discount_programs()
+
+        return self.async_show_form(
+            step_id="solar_features",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_solar", default=False): bool,
+                    vol.Optional(CONF_SOLAR_SURPLUS_RATE, default=0.04): vol.Coerce(float),
+                }
+            ),
+            description_placeholders={
+                "solar_info": (
+                    "Solar surplus rate: Compensation rate for surplus energy (€/kWh).\n"
+                    "Solar Wallet balance is retrieved from API automatically."
+                ),
+            },
+        )
+
+    async def async_step_discount_programs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle discount programs configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_discount"):
+                self._data[CONF_DISCOUNT_START_HOUR] = user_input.get(CONF_DISCOUNT_START_HOUR)
+                self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
+                self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
+            return await self.async_step_pvpc_sensor()
+
+        return self.async_show_form(
+            step_id="discount_programs",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_discount", default=False): bool,
+                    vol.Optional(CONF_DISCOUNT_START_HOUR, default=12): vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=23)
+                    ),
+                    vol.Optional(CONF_DISCOUNT_END_HOUR, default=18): vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=23)
+                    ),
+                    vol.Optional(CONF_DISCOUNT_PERCENTAGE, default=0.45): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                }
+            ),
         )
 
     async def async_step_pvpc_sensor(
@@ -338,12 +447,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
             
-            # Get tariff type for title
-            tariff_type = self._tariff_type or self._data.get(CONF_TARIFF_TYPE, "Unknown")
-            tariff_name = tariff_type.replace("_", " ").title() if tariff_type else "Unknown"
+            # Generate title based on pricing model
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            model_name = "Fixed" if pricing_model == PRICING_MODEL_FIXED else "Market"
             
             return self.async_create_entry(
-                title=f"Octopus Energy España - {tariff_name}",
+                title=f"Octopus Energy España - {model_name}",
                 data=self._data,
             )
 

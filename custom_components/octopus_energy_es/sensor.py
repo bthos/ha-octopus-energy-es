@@ -230,7 +230,7 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": "Octopus Energy España",
             "manufacturer": "Octopus Energy",
-            "model": coordinator._entry.data.get("tariff_type", "Unknown"),
+            "model": coordinator._entry.data.get("pricing_model", "Unknown"),
         }
 
 

@@ -13,11 +13,9 @@ from zoneinfo import ZoneInfo
 
 from .api.omie_client import OMIEClient
 from .api.octopus_client import OctopusClient, OctopusClientError
-from .api.tariff_scraper import TariffScraper, TariffScraperError
 from .const import (
     CONF_PROPERTY_ID,
     CONF_PVPC_SENSOR,
-    CONF_TARIFF_TYPE,
     DOMAIN,
     MARKET_PUBLISH_HOUR,
     TIMEZONE_MADRID,
@@ -63,8 +61,6 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         else:
             _LOGGER.info("Octopus Energy credentials not provided - using price data only")
             self._octopus_client = None
-
-        self._tariff_scraper = TariffScraper()
 
         # Create tariff calculator
         tariff_config = create_tariff_config(entry.data)
@@ -202,9 +198,15 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 account_info = await self._octopus_client.fetch_account_info()
                 if account_info:
                     # Add tariff from config entry since it's not available from API
-                    tariff_type = self._entry.data.get(CONF_TARIFF_TYPE)
-                    if tariff_type:
-                        account_info["tariff"] = tariff_type
+                    # Get tariff info from category-based structure
+                    pricing_model = self._entry.data.get("pricing_model")
+                    time_structure = self._entry.data.get("time_structure")
+                    
+                    if pricing_model:
+                        tariff_display = f"{pricing_model.title()}"
+                        if time_structure:
+                            tariff_display += f" - {time_structure.replace('_', ' ').title()}"
+                        account_info["tariff"] = tariff_display
                     self._account_data = account_info
             except OctopusClientError as err:
                 error_msg = str(err).lower()
@@ -364,6 +366,5 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         await self._omie_client.close()
         if self._octopus_client:
             await self._octopus_client.close()
-        await self._tariff_scraper.close()
         await super().async_shutdown()
 
