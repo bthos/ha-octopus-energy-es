@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -441,47 +441,106 @@ class OctopusEnergyESCheapestHourSensor(OctopusEnergyESSensor):
 class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
     """Daily consumption sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the daily consumption sensor."""
+        super().__init__(coordinator, description)
+        self._consumption_date: date | None = None
+        self._is_today: bool = False
+        self._data_available_until: date | None = None
+
     @property
     def native_value(self) -> float | None:
-        """Return daily consumption."""
+        """Return daily consumption (today's if available, otherwise most recent available)."""
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
         if not consumption:
+            self._consumption_date = None
+            self._is_today = False
+            self._data_available_until = None
             return None
 
-        # Sum consumption for today
+        # Group consumption by date and calculate daily totals
+        daily_totals: dict[date, float] = {}
+        all_dates: list[date] = []
+        
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
         today = now.date()
-        total = 0.0
 
         for item in consumption:
-            # Parse consumption item (format may vary)
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid and item_dt_madrid.date() == today:
-                        total += float(item.get("consumption", item.get("value", 0)))
+                    if item_dt_madrid:
+                        item_date = item_dt_madrid.date()
+                        if item_date not in daily_totals:
+                            daily_totals[item_date] = 0.0
+                            all_dates.append(item_date)
+                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
 
-        # Return 0 if we have consumption data but no data for today (data not available yet)
-        # Return None only if we have no consumption data at all
-        if len(consumption) > 0:
-            return round(total, 3)
-        return None
+        if not daily_totals:
+            self._consumption_date = None
+            self._is_today = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent date with data
+        all_dates.sort(reverse=True)
+        self._data_available_until = all_dates[0]
+
+        # Try today first, then fall back to most recent available date
+        if today in daily_totals:
+            self._consumption_date = today
+            self._is_today = True
+            return round(daily_totals[today], 3)
+        else:
+            # Use the most recent available date
+            most_recent_date = all_dates[0]
+            self._consumption_date = most_recent_date
+            self._is_today = False
+            return round(daily_totals[most_recent_date], 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+        
+        if self._consumption_date:
+            attrs["consumption_date"] = self._consumption_date.isoformat()
+        attrs["is_today"] = self._is_today
+        
+        if self._data_available_until:
+            attrs["data_available_until"] = self._data_available_until.isoformat()
+        
+        return attrs
 
 
 class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
     """Hourly consumption sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the hourly consumption sensor."""
+        super().__init__(coordinator, description)
+        self._consumption_datetime: datetime | None = None
+        self._is_current_hour: bool = False
+        self._data_available_until: datetime | None = None
+
     @property
     def native_value(self) -> float | None:
-        """Return current hour consumption."""
+        """Return hourly consumption (current hour's if available, otherwise most recent available)."""
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
         if not consumption:
+            self._consumption_datetime = None
+            self._is_current_hour = False
+            self._data_available_until = None
             return None
+
+        # Group consumption by hour and calculate hourly totals
+        hourly_totals: dict[datetime, float] = {}
+        all_hours: list[datetime] = []
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
         current_hour = now.replace(minute=0, second=0, microsecond=0)
@@ -493,67 +552,164 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
                     if item_dt_madrid:
                         item_hour = item_dt_madrid.replace(minute=0, second=0, microsecond=0)
-                        if item_hour == current_hour:
-                            return float(item.get("consumption", item.get("value", 0)))
+                        if item_hour not in hourly_totals:
+                            hourly_totals[item_hour] = 0.0
+                            all_hours.append(item_hour)
+                        hourly_totals[item_hour] += float(item.get("consumption", item.get("value", 0)))
 
-        # Return 0 if we have consumption data but no data for current hour (data not available yet)
-        # Return None only if we have no consumption data at all
-        if len(consumption) > 0:
-            return 0.0
-        return None
+        if not hourly_totals:
+            self._consumption_datetime = None
+            self._is_current_hour = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent hour with data
+        all_hours.sort(reverse=True)
+        self._data_available_until = all_hours[0]
+
+        # Try current hour first, then fall back to most recent available hour
+        if current_hour in hourly_totals:
+            self._consumption_datetime = current_hour
+            self._is_current_hour = True
+            return round(hourly_totals[current_hour], 3)
+        else:
+            # Use the most recent available hour
+            most_recent_hour = all_hours[0]
+            self._consumption_datetime = most_recent_hour
+            self._is_current_hour = False
+            return round(hourly_totals[most_recent_hour], 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+
+        if self._consumption_datetime:
+            attrs["consumption_datetime"] = self._consumption_datetime.isoformat()
+        attrs["is_current_hour"] = self._is_current_hour
+
+        if self._data_available_until:
+            attrs["data_available_until"] = self._data_available_until.isoformat()
+
+        return attrs
 
 
 class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
     """Monthly consumption sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the monthly consumption sensor."""
+        super().__init__(coordinator, description)
+        self._consumption_month: tuple[int, int] | None = None  # (year, month)
+        self._is_current_month: bool = False
+        self._data_available_until: tuple[int, int] | None = None  # (year, month)
+
     @property
     def native_value(self) -> float | None:
-        """Return monthly consumption."""
+        """Return monthly consumption (current month's if available, otherwise most recent available)."""
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
         if not consumption:
+            self._consumption_month = None
+            self._is_current_month = False
+            self._data_available_until = None
             return None
+
+        # Group consumption by month and calculate monthly totals
+        monthly_totals: dict[tuple[int, int], float] = {}
+        all_months: list[tuple[int, int]] = []
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
         current_month = now.month
         current_year = now.year
-
-        total = 0.0
 
         for item in consumption:
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid and item_dt_madrid.month == current_month and item_dt_madrid.year == current_year:
-                        total += float(item.get("consumption", item.get("value", 0)))
+                    if item_dt_madrid:
+                        month_key = (item_dt_madrid.year, item_dt_madrid.month)
+                        if month_key not in monthly_totals:
+                            monthly_totals[month_key] = 0.0
+                            all_months.append(month_key)
+                        monthly_totals[month_key] += float(item.get("consumption", item.get("value", 0)))
 
-        # Return total (even if 0) if we have consumption data
-        # Return None only if we have no consumption data at all
-        if len(consumption) > 0:
-            return round(total, 3) if total > 0 else 0.0
-        return None
+        if not monthly_totals:
+            self._consumption_month = None
+            self._is_current_month = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent month with data
+        all_months.sort(reverse=True)
+        self._data_available_until = all_months[0]
+
+        # Try current month first, then fall back to most recent available month
+        current_month_key = (current_year, current_month)
+        if current_month_key in monthly_totals:
+            self._consumption_month = current_month_key
+            self._is_current_month = True
+            return round(monthly_totals[current_month_key], 3)
+        else:
+            # Use the most recent available month
+            most_recent_month = all_months[0]
+            self._consumption_month = most_recent_month
+            self._is_current_month = False
+            return round(monthly_totals[most_recent_month], 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+
+        if self._consumption_month:
+            year, month = self._consumption_month
+            attrs["consumption_month"] = f"{year:04d}-{month:02d}"
+        attrs["is_current_month"] = self._is_current_month
+
+        if self._data_available_until:
+            year, month = self._data_available_until
+            attrs["data_available_until"] = f"{year:04d}-{month:02d}"
+
+        return attrs
 
 
 class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
     """Weekly consumption sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the weekly consumption sensor."""
+        super().__init__(coordinator, description)
+        self._consumption_week_start: date | None = None
+        self._consumption_week_end: date | None = None
+        self._is_current_week: bool = False
+        self._data_available_until: date | None = None
+
     @property
     def native_value(self) -> float | None:
-        """Return weekly consumption (last 7 days)."""
+        """Return weekly consumption (current week's if available, otherwise most recent available 7-day period)."""
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
         if not consumption:
+            self._consumption_week_start = None
+            self._consumption_week_end = None
+            self._is_current_week = False
+            self._data_available_until = None
             return None
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        # Calculate date range for last 7 days
-        end_date = now.date()
-        start_date = end_date - timedelta(days=6)  # Include today, so 6 days back + today = 7 days
+        today = now.date()
+        
+        # Calculate current week (last 7 days from today)
+        current_week_end = today
+        current_week_start = current_week_end - timedelta(days=6)
 
-        total = 0.0
+        # Group consumption by date and calculate daily totals
+        daily_totals: dict[date, float] = {}
+        all_dates: list[date] = []
 
         for item in consumption:
             if isinstance(item, dict):
@@ -562,46 +718,152 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
                     if item_dt_madrid:
                         item_date = item_dt_madrid.date()
-                        if start_date <= item_date <= end_date:
-                            total += float(item.get("consumption", item.get("value", 0)))
+                        if item_date not in daily_totals:
+                            daily_totals[item_date] = 0.0
+                            all_dates.append(item_date)
+                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
 
-        # Return total (even if 0) if we have consumption data
-        # Return None only if we have no consumption data at all
-        if len(consumption) > 0:
-            return round(total, 3) if total > 0 else 0.0
+        if not daily_totals:
+            self._consumption_week_start = None
+            self._consumption_week_end = None
+            self._is_current_week = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent date with data
+        all_dates.sort(reverse=True)
+        self._data_available_until = all_dates[0]
+
+        # Try current week first
+        current_week_total = 0.0
+        has_current_week_data = False
+        for check_date in (current_week_start + timedelta(days=i) for i in range(7)):
+            if check_date in daily_totals:
+                current_week_total += daily_totals[check_date]
+                has_current_week_data = True
+
+        if has_current_week_data and current_week_total > 0:
+            self._consumption_week_start = current_week_start
+            self._consumption_week_end = current_week_end
+            self._is_current_week = True
+            return round(current_week_total, 3)
+
+        # Fall back to most recent 7-day period with data
+        # Find the most recent date with data and sum 7 days ending on that date
+        most_recent_date = all_dates[0]
+        most_recent_week_end = most_recent_date
+        most_recent_week_start = most_recent_week_end - timedelta(days=6)
+
+        most_recent_week_total = 0.0
+        for check_date in (most_recent_week_start + timedelta(days=i) for i in range(7)):
+            if check_date in daily_totals:
+                most_recent_week_total += daily_totals[check_date]
+
+        if most_recent_week_total > 0:
+            self._consumption_week_start = most_recent_week_start
+            self._consumption_week_end = most_recent_week_end
+            self._is_current_week = False
+            return round(most_recent_week_total, 3)
+
+        # No valid week found
+        self._consumption_week_start = None
+        self._consumption_week_end = None
+        self._is_current_week = False
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+
+        if self._consumption_week_start:
+            attrs["consumption_week_start"] = self._consumption_week_start.isoformat()
+        if self._consumption_week_end:
+            attrs["consumption_week_end"] = self._consumption_week_end.isoformat()
+        attrs["is_current_week"] = self._is_current_week
+
+        if self._data_available_until:
+            attrs["data_available_until"] = self._data_available_until.isoformat()
+
+        return attrs
 
 
 class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
     """Yearly consumption sensor."""
 
+    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
+        """Initialize the yearly consumption sensor."""
+        super().__init__(coordinator, description)
+        self._consumption_year: int | None = None
+        self._is_current_year: bool = False
+        self._data_available_until: int | None = None
+
     @property
     def native_value(self) -> float | None:
-        """Return yearly consumption."""
+        """Return yearly consumption (current year's if available, otherwise most recent available)."""
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
         if not consumption:
+            self._consumption_year = None
+            self._is_current_year = False
+            self._data_available_until = None
             return None
+
+        # Group consumption by year and calculate yearly totals
+        yearly_totals: dict[int, float] = {}
+        all_years: list[int] = []
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
         current_year = now.year
-
-        total = 0.0
 
         for item in consumption:
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
                 if item_time_str:
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid and item_dt_madrid.year == current_year:
-                        total += float(item.get("consumption", item.get("value", 0)))
+                    if item_dt_madrid:
+                        year = item_dt_madrid.year
+                        if year not in yearly_totals:
+                            yearly_totals[year] = 0.0
+                            all_years.append(year)
+                        yearly_totals[year] += float(item.get("consumption", item.get("value", 0)))
 
-        # Return total (even if 0) if we have consumption data
-        # Return None only if we have no consumption data at all
-        if len(consumption) > 0:
-            return round(total, 3) if total > 0 else 0.0
-        return None
+        if not yearly_totals:
+            self._consumption_year = None
+            self._is_current_year = False
+            self._data_available_until = None
+            return None
+
+        # Find the most recent year with data
+        all_years.sort(reverse=True)
+        self._data_available_until = all_years[0]
+
+        # Try current year first, then fall back to most recent available year
+        if current_year in yearly_totals:
+            self._consumption_year = current_year
+            self._is_current_year = True
+            return round(yearly_totals[current_year], 3)
+        else:
+            # Use the most recent available year
+            most_recent_year = all_years[0]
+            self._consumption_year = most_recent_year
+            self._is_current_year = False
+            return round(yearly_totals[most_recent_year], 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+
+        if self._consumption_year:
+            attrs["consumption_year"] = f"{self._consumption_year:04d}"
+        attrs["is_current_year"] = self._is_current_year
+
+        if self._data_available_until:
+            attrs["data_available_until"] = f"{self._data_available_until:04d}"
+
+        return attrs
 
 
 class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
