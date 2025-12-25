@@ -163,14 +163,6 @@ ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:currency-eur",
 )
 
-ACCOUNT_CREDITS_LAST_MONTH_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="account_credits_last_month",
-    name="Octopus Energy España Account Credits Last Month",
-    native_unit_of_measurement="€",
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
-)
-
 ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="account",
     name="Octopus Energy España Account",
@@ -215,9 +207,6 @@ async def async_setup_entry(
         ),
         OctopusEnergyESAccountCreditsCurrentMonthSensor(
             coordinator, ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESAccountCreditsLastMonthSensor(
-            coordinator, ACCOUNT_CREDITS_LAST_MONTH_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
     ]
@@ -1041,65 +1030,6 @@ class OctopusEnergyESAccountCreditsCurrentMonthSensor(OctopusEnergyESSensor):
                 
                 if current_month_by_reason:
                     attrs["credits_by_reason_code"] = current_month_by_reason
-
-        return attrs
-
-
-class OctopusEnergyESAccountCreditsLastMonthSensor(OctopusEnergyESSensor):
-    """Account credits last month sensor."""
-
-    @property
-    def native_value(self) -> float | None:
-        """Return last month account credits."""
-        data = self.coordinator.data
-        credits = data.get("credits", {})
-
-        if not credits:
-            return None
-
-        totals = credits.get("totals", {})
-        return totals.get("last_month")
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes with breakdown by reason code for last month."""
-        attrs: dict[str, Any] = {}
-        data = self.coordinator.data
-        credits = data.get("credits", {})
-
-        if credits:
-            by_reason_code = credits.get("by_reason_code", {})
-            if by_reason_code:
-                # Calculate last month totals by reason code
-                from datetime import datetime, timedelta
-                from zoneinfo import ZoneInfo
-                from .const import TIMEZONE_MADRID
-                
-                now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-                current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
-                last_month_end = current_month_start - timedelta(seconds=1)
-                
-                last_month_by_reason: dict[str, float] = {}
-                for reason_code, credit_list in by_reason_code.items():
-                    month_total = 0.0
-                    for credit in credit_list:
-                        created_at_str = credit.get("createdAt")
-                        if created_at_str:
-                            try:
-                                created_at = datetime.fromisoformat(
-                                    created_at_str.replace("Z", "+00:00")
-                                ).astimezone(ZoneInfo(TIMEZONE_MADRID))
-                                if last_month_start <= created_at <= last_month_end:
-                                    amount = float(credit.get("amount", 0)) / 100
-                                    month_total += amount
-                            except (ValueError, AttributeError):
-                                pass
-                    if month_total > 0:
-                        last_month_by_reason[reason_code] = round(month_total, 2)
-                
-                if last_month_by_reason:
-                    attrs["credits_by_reason_code"] = last_month_by_reason
 
         return attrs
 

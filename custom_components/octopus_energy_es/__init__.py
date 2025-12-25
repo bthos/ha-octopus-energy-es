@@ -168,6 +168,22 @@ async def _load_historical_data(
             coordinator._historical_data = []
         coordinator._historical_data.extend(historical_data)
 
+        # Load historical credits data for the same date range
+        _LOGGER.info("Loading historical credits data for the same date range...")
+        historical_credits = await coordinator.async_load_historical_credits(
+            start_date=start_date, end_date=end_date
+        )
+        
+        if historical_credits:
+            _LOGGER.info(
+                "Fetched %d historical credit records",
+                len(historical_credits)
+            )
+            # Store historical credits in coordinator
+            if not hasattr(coordinator, "_historical_credits_data"):
+                coordinator._historical_credits_data = []
+            coordinator._historical_credits_data.extend(historical_credits)
+
         # Update config entry to mark historical data as loaded
         entry_data = dict(entry.data)
         entry_data[CONF_HISTORICAL_DATA_LOADED] = True
@@ -176,8 +192,9 @@ async def _load_historical_data(
         hass.config_entries.async_update_entry(entry, data=entry_data)
 
         _LOGGER.info(
-            "Successfully loaded and stored %d historical consumption measurements",
-            len(historical_data)
+            "Successfully loaded and stored %d historical consumption measurements and %d historical credit records",
+            len(historical_data),
+            len(historical_credits) if historical_credits else 0
         )
 
     except Exception as err:
