@@ -292,18 +292,22 @@ class OctopusClient:
             query getAccountMeasurements(
                 $propertyId: ID!
                 $first: Int!
+                $utilityFilters: [UtilityFiltersInput!]
+                $startOn: Date
+                $endOn: Date
                 $startAt: DateTime
                 $endAt: DateTime
-                $after: String
-                $utilityFilters: [UtilityFiltersInput!]
+                $timezone: String
             ) {
                 property(id: $propertyId) {
                     measurements(
                         first: $first
+                        utilityFilters: $utilityFilters
+                        startOn: $startOn
+                        endOn: $endOn
                         startAt: $startAt
                         endAt: $endAt
-                        after: $after
-                        utilityFilters: $utilityFilters
+                        timezone: $timezone
                     ) {
                         edges {
                             node {
@@ -312,6 +316,26 @@ class OctopusClient:
                                 ... on IntervalMeasurementType {
                                     startAt
                                     endAt
+                                    durationInSeconds
+                                }
+                                metaData {
+                                    statistics {
+                                        costExclTax {
+                                            pricePerUnit {
+                                                amount
+                                            }
+                                            costCurrency
+                                            estimatedAmount
+                                        }
+                                        costInclTax {
+                                            costCurrency
+                                            estimatedAmount
+                                        }
+                                        value
+                                        description
+                                        label
+                                        type
+                                    }
                                 }
                             }
                         }
@@ -355,6 +379,7 @@ class OctopusClient:
             first = days_diff
         
         # Limit to reasonable page size (API may have limits)
+        # Dashboard uses 30 for monthly view, so we'll use similar limits
         page_size = min(first, 100)
         
         all_measurements: list[dict[str, Any]] = []
@@ -365,17 +390,47 @@ class OctopusClient:
             
             # Fetch all pages
             while True:
+                # Determine reading frequency type based on granularity
+                # Dashboard uses "DAY_INTERVAL" for daily data
+                reading_frequency_type = "DAY_INTERVAL" if granularity == "daily" else "HOUR_INTERVAL"
+                
+                # Format dates as UTC timestamps matching dashboard format
+                # Dashboard adjusts for DST:
+                # - During CEST (summer, UTC+2): Uses T22:00:00.000Z (22:00 UTC = 00:00 CEST)
+                # - During CET (winter, UTC+1): Uses T23:00:00.000Z (23:00 UTC = 00:00 CET)
+                # 
+                # Dashboard pattern:
+                # - For data starting on start_date: use start_date at 00:00 Madrid → UTC
+                #   Example: Nov 1 00:00 Madrid = Oct 31 23:00 UTC (CET)
+                # - For data ending on end_date: use (end_date + 1 day) at 00:00 Madrid → UTC
+                #   Example: Dec 1 00:00 Madrid = Nov 30 23:00 UTC (CET)
+                from datetime import timezone as tz
+                from zoneinfo import ZoneInfo
+                
+                # Start: midnight Madrid time on start_date converted to UTC
+                # This automatically handles DST (22:00 UTC for CEST, 23:00 UTC for CET)
+                start_madrid = datetime.combine(start_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+                start_dt = start_madrid.astimezone(tz.utc)
+                
+                # End: midnight Madrid time on (end_date + 1 day) converted to UTC
+                # This gives us end_date at 23:00 UTC (CET) or 22:00 UTC (CEST)
+                end_madrid = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+                end_dt = end_madrid.astimezone(tz.utc)
+                
                 variables: dict[str, Any] = {
                     "propertyId": property_id,
-                    "startAt": start_date.isoformat() + "T00:00:00Z",
-                    "endAt": end_date.isoformat() + "T23:59:59Z",
                     "first": page_size,
+                    "startAt": start_dt.isoformat().replace("+00:00", "Z"),
+                    "endAt": end_dt.isoformat().replace("+00:00", "Z"),
+                    "timezone": "Europe/Madrid",
                     "utilityFilters": [
                         {
-                            "utilityType": "ELECTRICITY",
-                            "readingDirection": "CONSUMPTION"
+                            "electricityFilters": {
+                                "readingDirection": "CONSUMPTION",
+                                "readingFrequencyType": reading_frequency_type
+                            }
                         }
-                    ]
+                    ],
                 }
                 if after:
                     variables["after"] = after
@@ -420,17 +475,25 @@ class OctopusClient:
                 
                 edges = measurements.get("edges", [])
                 page_info = measurements.get("pageInfo", {})
-                _LOGGER.debug(
-                    "Property query returned %d edges, pageInfo=%s for date range %s to %s",
-                    len(edges),
-                    page_info,
-                    variables.get("startAt"),
-                    variables.get("endAt")
-                )
                 
-                # Log first edge structure for debugging if edges exist
-                if edges and len(edges) > 0:
-                    _LOGGER.debug("Sample edge structure: %s", edges[0])
+                if len(edges) == 0:
+                    _LOGGER.debug(
+                        "Property query returned 0 edges for date range %s to %s. "
+                        "This may indicate no consumption data is available for this period.",
+                        variables.get("startAt"),
+                        variables.get("endAt")
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Property query returned %d edges, pageInfo=%s for date range %s to %s",
+                        len(edges),
+                        page_info,
+                        variables.get("startAt"),
+                        variables.get("endAt")
+                    )
+                    # Log first edge structure for debugging if edges exist
+                    if edges and len(edges) > 0:
+                        _LOGGER.debug("Sample edge structure: %s", edges[0])
                 
                 # Extract measurements
                 for edge in edges:
