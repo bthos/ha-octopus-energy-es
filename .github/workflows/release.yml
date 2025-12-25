@@ -109,20 +109,6 @@ jobs:
 
             ${{ steps.changelog.outputs.changelog }}
 
-            ### 📥 Installation
-
-            **Via HACS:**
-            1. Open HACS → Integrations
-            2. Click the three dots menu → Custom repositories
-            3. Add this repository URL
-            4. Search for "Octopus Energy España" and install
-            5. Restart Home Assistant
-
-            **Manual Installation:**
-            1. Download the [latest release](https://github.com/${{ github.repository }}/releases/latest)
-            2. Extract `custom_components/octopus_energy_es` to your Home Assistant `custom_components` directory
-            3. Restart Home Assistant
-
             ### 🔗 Links
 
             - [Full Changelog](https://github.com/${{ github.repository }}/compare/${{ steps.get_previous_tag.outputs.previous_tag }}...v${{ steps.get_version.outputs.version }})

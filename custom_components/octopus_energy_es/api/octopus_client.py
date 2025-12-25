@@ -295,6 +295,7 @@ class OctopusClient:
                 $startAt: DateTime
                 $endAt: DateTime
                 $after: String
+                $utilityFilters: [UtilityFiltersInput!]
             ) {
                 property(id: $propertyId) {
                     measurements(
@@ -302,6 +303,7 @@ class OctopusClient:
                         startAt: $startAt
                         endAt: $endAt
                         after: $after
+                        utilityFilters: $utilityFilters
                     ) {
                         edges {
                             node {
@@ -368,6 +370,12 @@ class OctopusClient:
                     "startAt": start_date.isoformat() + "T00:00:00Z",
                     "endAt": end_date.isoformat() + "T23:59:59Z",
                     "first": page_size,
+                    "utilityFilters": [
+                        {
+                            "utilityType": "ELECTRICITY",
+                            "readingDirection": "CONSUMPTION"
+                        }
+                    ]
                 }
                 if after:
                     variables["after"] = after
