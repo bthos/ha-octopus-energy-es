@@ -934,7 +934,7 @@ class OctopusClient:
         self, ledger_number: str | None = None, from_date: str = "2025-01-01"
     ) -> dict[str, Any]:
         """
-        Fetch account credits (transactions) using GraphQL.
+        Fetch credits (transactions) using GraphQL.
         
         Retrieves credits including SUN_CLUB and SUN_CLUB_POWER_UP savings.
         

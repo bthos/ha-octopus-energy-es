@@ -21,6 +21,9 @@ from .const import (
     ATTR_PRICE_PER_KWH,
     ATTR_START_TIME,
     ATTR_UNIT_OF_MEASUREMENT,
+    CONF_DISCOUNT_END_HOUR,
+    CONF_DISCOUNT_PERCENTAGE,
+    CONF_DISCOUNT_START_HOUR,
     DOMAIN,
     TIMEZONE_MADRID,
 )
@@ -147,17 +150,17 @@ BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:calendar-range",
 )
 
-ACCOUNT_CREDITS_TOTAL_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="account_credits_total",
-    name="Octopus Energy España Account Credits Total",
+CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="credits",
+    name="Octopus Energy España Credits",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
 )
 
-ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="account_credits_current_month",
-    name="Octopus Energy España Account Credits Current Month",
+CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="credits_estimated",
+    name="Octopus Energy España Credits Estimated",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
@@ -202,11 +205,11 @@ async def async_setup_entry(
         OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
-        OctopusEnergyESAccountCreditsTotalSensor(
-            coordinator, ACCOUNT_CREDITS_TOTAL_SENSOR_DESCRIPTION
+        OctopusEnergyESCreditsSensor(
+            coordinator, CREDITS_SENSOR_DESCRIPTION
         ),
-        OctopusEnergyESAccountCreditsCurrentMonthSensor(
-            coordinator, ACCOUNT_CREDITS_CURRENT_MONTH_SENSOR_DESCRIPTION
+        OctopusEnergyESCreditsEstimatedSensor(
+            coordinator, CREDITS_ESTIMATED_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
     ]
@@ -993,12 +996,12 @@ class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
         return None
 
 
-class OctopusEnergyESAccountCreditsTotalSensor(OctopusEnergyESSensor):
-    """Account credits total sensor."""
+class OctopusEnergyESCreditsSensor(OctopusEnergyESSensor):
+    """Credits sensor (shows last month's credits as Octopus calculates them post factum)."""
 
     @property
     def native_value(self) -> float | None:
-        """Return total account credits."""
+        """Return credits (last month's credits)."""
         data = self.coordinator.data
         credits = data.get("credits", {})
 
@@ -1006,7 +1009,7 @@ class OctopusEnergyESAccountCreditsTotalSensor(OctopusEnergyESSensor):
             return None
 
         totals = credits.get("totals", {})
-        return totals.get("total")
+        return totals.get("current_month")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1016,10 +1019,38 @@ class OctopusEnergyESAccountCreditsTotalSensor(OctopusEnergyESSensor):
         credits = data.get("credits", {})
 
         if credits:
-            totals_by_reason_code = credits.get("totals_by_reason_code", {})
-            if totals_by_reason_code:
-                attrs["credits_by_reason_code"] = totals_by_reason_code
-                attrs["reason_codes"] = list(totals_by_reason_code.keys())
+            by_reason_code = credits.get("by_reason_code", {})
+            if by_reason_code:
+                # Calculate current month totals by reason code
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                from .const import TIMEZONE_MADRID
+                
+                now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+                current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                
+                current_month_by_reason: dict[str, float] = {}
+                for reason_code, credit_list in by_reason_code.items():
+                    month_total = 0.0
+                    for credit in credit_list:
+                        created_at_str = credit.get("createdAt")
+                        if created_at_str:
+                            try:
+                                created_at = datetime.fromisoformat(
+                                    created_at_str.replace("Z", "+00:00")
+                                ).astimezone(ZoneInfo(TIMEZONE_MADRID))
+                                if created_at >= current_month_start:
+                                    # Amount is in cents, convert to euros
+                                    amount = float(credit.get("amount", 0)) / 100
+                                    month_total += amount
+                            except (ValueError, TypeError):
+                                pass
+                    if month_total > 0:
+                        current_month_by_reason[reason_code] = round(month_total, 2)
+                
+                if current_month_by_reason:
+                    attrs["credits_by_reason_code"] = current_month_by_reason
+                    attrs["reason_codes"] = list(current_month_by_reason.keys())
             
             # Backward compatibility: show SUN_CLUB specific totals if available
             totals = credits.get("totals", {})
@@ -1031,20 +1062,88 @@ class OctopusEnergyESAccountCreditsTotalSensor(OctopusEnergyESSensor):
         return attrs
 
 
-class OctopusEnergyESAccountCreditsCurrentMonthSensor(OctopusEnergyESSensor):
-    """Account credits current month sensor."""
+class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
+    """Estimated credits sensor (calculates future credits based on consumption during discounted hours)."""
 
     @property
     def native_value(self) -> float | None:
-        """Return current month account credits."""
+        """Return estimated credits for current month based on consumption during discount hours."""
         data = self.coordinator.data
-        credits = data.get("credits", {})
+        consumption = data.get("consumption", [])
+        prices = data.get("today_prices", [])
 
-        if not credits:
+        if not consumption or not prices:
             return None
 
-        totals = credits.get("totals", {})
-        return totals.get("current_month")
+        # Get discount configuration from entry
+        entry = self.coordinator._entry
+        discount_start_hour = entry.data.get(CONF_DISCOUNT_START_HOUR)
+        discount_end_hour = entry.data.get(CONF_DISCOUNT_END_HOUR)
+        discount_percentage = entry.data.get(CONF_DISCOUNT_PERCENTAGE)
+
+        # If no discount configured, return None
+        if (
+            discount_start_hour is None
+            or discount_end_hour is None
+            or discount_percentage is None
+        ):
+            return None
+
+        # Calculate estimated credits for current month
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        total_estimated_credits = 0.0
+
+        # Process consumption data
+        for item in consumption:
+            if isinstance(item, dict):
+                item_time_str = item.get("start_time") or item.get("date")
+                if item_time_str:
+                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                    if item_dt_madrid and item_dt_madrid >= current_month_start:
+                        hour = item_dt_madrid.hour
+                        
+                        # Check if this hour is within discount period
+                        if discount_start_hour <= hour < discount_end_hour:
+                            consumption_value = float(
+                                item.get("consumption", item.get("value", 0))
+                            )
+                            
+                            # Find matching price for this hour
+                            for price in prices:
+                                price_dt_madrid = _parse_datetime_to_madrid(
+                                    price.get("start_time", "")
+                                )
+                                if (
+                                    price_dt_madrid
+                                    and price_dt_madrid.date() == item_dt_madrid.date()
+                                    and price_dt_madrid.hour == hour
+                                ):
+                                    price_per_kwh = price.get("price_per_kwh", 0)
+                                    # Calculate credit: consumption * price * discount_percentage
+                                    credit = consumption_value * price_per_kwh * discount_percentage
+                                    total_estimated_credits += credit
+                                    break
+
+        return round(total_estimated_credits, 2) if total_estimated_credits > 0 else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs: dict[str, Any] = {}
+        entry = self.coordinator._entry
+        
+        discount_start_hour = entry.data.get(CONF_DISCOUNT_START_HOUR)
+        discount_end_hour = entry.data.get(CONF_DISCOUNT_END_HOUR)
+        discount_percentage = entry.data.get(CONF_DISCOUNT_PERCENTAGE)
+        
+        if discount_start_hour is not None and discount_end_hour is not None:
+            attrs["discount_hours"] = f"{discount_start_hour:02d}:00 - {discount_end_hour:02d}:00"
+        if discount_percentage is not None:
+            attrs["discount_percentage"] = f"{discount_percentage * 100:.0f}%"
+        
+        return attrs
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
