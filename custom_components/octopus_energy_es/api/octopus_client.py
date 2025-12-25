@@ -205,6 +205,7 @@ class OctopusClient:
         start_date: date | None = None,
         end_date: date | None = None,
         granularity: str = "hourly",
+        use_property_query: bool = True,
     ) -> list[dict[str, Any]]:
         """
         Fetch consumption data using GraphQL.
@@ -213,6 +214,8 @@ class OctopusClient:
             start_date: Start date for consumption data
             end_date: End date for consumption data
             granularity: 'hourly' or 'daily'
+            use_property_query: If True, use property-based query (more efficient, default).
+                               If False, use account-based query (fallback).
 
         Returns:
             List of consumption data dictionaries with:
@@ -220,6 +223,199 @@ class OctopusClient:
             - end_time: ISO datetime string
             - consumption: kWh value
             - unit: "kWh"
+        """
+        # Default: property-based query (more efficient, discovered via reverse engineering)
+        # Falls back to account-based query if property query fails
+        if use_property_query:
+            try:
+                return await self._fetch_consumption_via_property(
+                    start_date=start_date,
+                    end_date=end_date,
+                    granularity=granularity,
+                )
+            except Exception as err:
+                _LOGGER.warning(
+                    "Property-based consumption query failed, falling back to account-based query: %s",
+                    err
+                )
+                return await self._fetch_consumption_via_account(
+                    start_date=start_date,
+                    end_date=end_date,
+                    granularity=granularity,
+                )
+        
+        # Fallback: account-based query
+        return await self._fetch_consumption_via_account(
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity,
+        )
+
+    async def _fetch_consumption_via_property(
+        self,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        granularity: str = "hourly",
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch consumption data using property-based query (preferred method).
+        
+        This method uses property(id: $propertyId) directly, which is more efficient
+        than fetching through account.properties. Discovered via reverse engineering
+        of the dashboard JavaScript.
+        
+        Features:
+        - Direct property access (more efficient)
+        - Server-side timezone conversion via timezone parameter
+        - Utility filtering support (if available in schema)
+        
+        Args:
+            start_date: Start date for consumption data
+            end_date: End date for consumption data
+            granularity: 'hourly' or 'daily'
+            
+        Returns:
+            List of consumption data dictionaries
+        """
+        query = """
+            query getAccountMeasurements(
+                $propertyId: ID!
+                $first: Int!
+                $startAt: DateTime
+                $endAt: DateTime
+                $timezone: String
+                $after: String
+            ) {
+                property(id: $propertyId) {
+                    measurements(
+                        first: $first
+                        startAt: $startAt
+                        endAt: $endAt
+                        timezone: $timezone
+                        after: $after
+                    ) {
+                        edges {
+                            node {
+                                startAt
+                                endAt
+                                value
+                                unit
+                            }
+                        }
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                    }
+                }
+            }
+        """
+        
+        # Get property ID
+        property_id = await self._fetch_property_id()
+        if not property_id:
+            raise OctopusClientError("No property ID available for property-based consumption query")
+        
+        # Set date range (default to last 7 days)
+        if not start_date:
+            start_date = date.today() - timedelta(days=7)
+        if not end_date:
+            end_date = date.today()
+        
+        # Calculate number of measurements based on granularity
+        days_diff = (end_date - start_date).days + 1
+        if granularity == "hourly":
+            first = days_diff * 24
+        else:
+            first = days_diff
+        
+        # Limit to reasonable page size (API may have limits)
+        page_size = min(first, 100)
+        
+        all_measurements: list[dict[str, Any]] = []
+        after: str | None = None
+        
+        try:
+            client = await self._get_graphql_client()
+            
+            # Fetch all pages
+            while True:
+                variables: dict[str, Any] = {
+                    "propertyId": property_id,
+                    "startAt": start_date.isoformat() + "T00:00:00Z",
+                    "endAt": end_date.isoformat() + "T23:59:59Z",
+                    "first": page_size,
+                    "timezone": TIMEZONE_MADRID,  # Use Madrid timezone for server-side conversion
+                }
+                if after:
+                    variables["after"] = after
+                
+                response = await client.execute_async(query, variables)
+                
+                if "errors" in response:
+                    error_msg = str(response["errors"])
+                    _LOGGER.error("GraphQL error fetching consumption via property: %s", error_msg)
+                    # Raise error to trigger fallback in fetch_consumption()
+                    raise OctopusClientError(f"Property-based query failed: {error_msg}")
+                
+                if "data" not in response or "property" not in response["data"]:
+                    _LOGGER.warning("Unexpected response format when fetching consumption via property")
+                    raise OctopusClientError("Unexpected response format from property-based query")
+                
+                property_data = response["data"]["property"]
+                if not property_data:
+                    break
+                
+                measurements = property_data.get("measurements", {})
+                edges = measurements.get("edges", [])
+                
+                # Extract measurements
+                for edge in edges:
+                    node = edge.get("node", {})
+                    if not node.get("startAt") or node.get("value") is None:
+                        continue
+                    
+                    measurement = {
+                        "start_time": node.get("startAt"),
+                        "end_time": node.get("endAt"),
+                        "consumption": float(node.get("value", 0)),
+                        "unit": node.get("unit", "kWh"),
+                    }
+                    all_measurements.append(measurement)
+                
+                # Check for next page
+                page_info = measurements.get("pageInfo", {})
+                if not page_info.get("hasNextPage", False):
+                    break
+                
+                after = page_info.get("endCursor")
+                if not after:
+                    break
+                
+                # Limit total number of pages to avoid infinite loops
+                if len(all_measurements) >= first:
+                    break
+            
+            _LOGGER.debug("Fetched %d consumption measurements via property query", len(all_measurements))
+            return all_measurements
+            
+        except Exception as err:
+            if isinstance(err, OctopusClientError):
+                raise
+            _LOGGER.error("Error fetching consumption via property: %s", err, exc_info=True)
+            # Re-raise to trigger fallback in fetch_consumption()
+            raise OctopusClientError(f"Property-based query error: {err}") from err
+    
+    async def _fetch_consumption_via_account(
+        self,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        granularity: str = "hourly",
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch consumption data using account-based query (original implementation).
+        
+        This is the fallback method that uses account(accountNumber: $accountNumber).properties.
         """
         query = """
             query MeasurementsQuery(

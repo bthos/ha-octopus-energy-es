@@ -43,7 +43,8 @@ UPDATE_INTERVAL_BILLING = timedelta(hours=24)
 MARKET_PUBLISH_HOUR = 14
 
 # Octopus Energy España uses GraphQL API
-OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
+# Using the same endpoint as the dashboard for consistency
+OCTOPUS_API_BASE_URL = "https://octopusenergy.es/api/graphql/kraken"
 
 # Default timezone
 TIMEZONE_MADRID = "Europe/Madrid"
