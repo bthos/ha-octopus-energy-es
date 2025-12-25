@@ -133,22 +133,6 @@ DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
     icon="mdi:currency-eur",
 )
 
-CURRENT_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="current_bill",
-    name="Octopus Energy España Current Bill",
-    native_unit_of_measurement="€",
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:receipt",
-)
-
-MONTHLY_BILL_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="monthly_bill",
-    name="Octopus Energy España Monthly Bill",
-    native_unit_of_measurement="€",
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:receipt",
-)
-
 LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="last_invoice",
     name="Octopus Energy España Last Invoice",
@@ -240,8 +224,6 @@ async def async_setup_entry(
             coordinator, YEARLY_CONSUMPTION_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESDailyCostSensor(coordinator, DAILY_COST_SENSOR_DESCRIPTION),
-        OctopusEnergyESCurrentBillSensor(coordinator, CURRENT_BILL_SENSOR_DESCRIPTION),
-        OctopusEnergyESMonthlyBillSensor(coordinator, MONTHLY_BILL_SENSOR_DESCRIPTION),
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
         OctopusEnergyESSunClubTotalSavingsSensor(
@@ -935,37 +917,6 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
                                 break
 
         return round(total_cost, 2) if total_cost > 0 else None
-
-
-class OctopusEnergyESCurrentBillSensor(OctopusEnergyESSensor):
-    """Current bill sensor."""
-
-    @property
-    def native_value(self) -> float | None:
-        """Return current bill amount."""
-        data = self.coordinator.data
-        billing = data.get("billing", {})
-
-        if not billing:
-            return None
-
-        # Extract current bill from billing data
-        return billing.get("current_bill") or billing.get("amount")
-
-
-class OctopusEnergyESMonthlyBillSensor(OctopusEnergyESSensor):
-    """Monthly bill sensor."""
-
-    @property
-    def native_value(self) -> float | None:
-        """Return monthly bill amount."""
-        data = self.coordinator.data
-        billing = data.get("billing", {})
-
-        if not billing:
-            return None
-
-        return billing.get("monthly_bill") or billing.get("month_amount")
 
 
 class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
