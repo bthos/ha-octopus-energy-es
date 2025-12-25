@@ -331,11 +331,19 @@ class OctopusClient:
             )
             raise OctopusClientError("No property ID available for property-based consumption query")
         
-        # Set date range (default to last 7 days)
+        # Set date range (default to last 30 days to ensure we get data)
         if not start_date:
-            start_date = date.today() - timedelta(days=7)
+            start_date = date.today() - timedelta(days=30)
         if not end_date:
             end_date = date.today()
+        
+        _LOGGER.debug(
+            "Fetching consumption via property query: propertyId=%s, dateRange=%s to %s, granularity=%s",
+            property_id,
+            start_date.isoformat(),
+            end_date.isoformat(),
+            granularity
+        )
         
         # Calculate number of measurements based on granularity
         days_diff = (end_date - start_date).days + 1
@@ -394,15 +402,36 @@ class OctopusClient:
                 
                 property_data = response["data"]["property"]
                 if not property_data:
+                    _LOGGER.debug("Property data is None or empty")
                     break
                 
                 measurements = property_data.get("measurements", {})
+                if not measurements:
+                    _LOGGER.debug("No measurements object in property data")
+                    break
+                
                 edges = measurements.get("edges", [])
+                page_info = measurements.get("pageInfo", {})
+                _LOGGER.debug(
+                    "Property query returned %d edges, pageInfo=%s for date range %s to %s",
+                    len(edges),
+                    page_info,
+                    variables.get("startAt"),
+                    variables.get("endAt")
+                )
+                
+                # Log first edge structure for debugging if edges exist
+                if edges and len(edges) > 0:
+                    _LOGGER.debug("Sample edge structure: %s", edges[0])
                 
                 # Extract measurements
                 for edge in edges:
                     node = edge.get("node", {})
+                    # Log node structure for debugging
+                    _LOGGER.debug("Processing node: startAt=%s, value=%s, keys=%s", 
+                                 node.get("startAt"), node.get("value"), list(node.keys()))
                     if not node.get("startAt") or node.get("value") is None:
+                        _LOGGER.debug("Skipping node: missing startAt or value")
                         continue
                     
                     measurement = {
@@ -426,7 +455,30 @@ class OctopusClient:
                 if len(all_measurements) >= first:
                     break
             
-            _LOGGER.debug("Fetched %d consumption measurements via property query", len(all_measurements))
+            if len(all_measurements) == 0:
+                _LOGGER.warning(
+                    "Property query returned 0 measurements for date range %s to %s. "
+                    "Trying account-based query as fallback.",
+                    start_date.isoformat(),
+                    end_date.isoformat()
+                )
+                # Try account-based query as fallback when property query returns no data
+                try:
+                    account_result = await self._fetch_consumption_via_account(
+                        start_date=start_date,
+                        end_date=end_date,
+                        granularity=granularity,
+                    )
+                    if account_result:
+                        _LOGGER.info(
+                            "Account-based query returned %d measurements (property query returned 0)",
+                            len(account_result)
+                        )
+                        return account_result
+                except Exception as account_err:
+                    _LOGGER.debug("Account-based fallback also failed: %s", account_err)
+            else:
+                _LOGGER.debug("Fetched %d consumption measurements via property query", len(all_measurements))
             return all_measurements
             
         except Exception as err:
@@ -500,11 +552,19 @@ class OctopusClient:
             _LOGGER.warning("No property ID available for fetching consumption")
             return []
         
-        # Set date range (default to last 7 days)
+        # Set date range (default to last 30 days to ensure we get data)
         if not start_date:
-            start_date = date.today() - timedelta(days=7)
+            start_date = date.today() - timedelta(days=30)
         if not end_date:
             end_date = date.today()
+        
+        _LOGGER.debug(
+            "Fetching consumption via account query: accountNumber=%s, dateRange=%s to %s, granularity=%s",
+            account,
+            start_date.isoformat(),
+            end_date.isoformat(),
+            granularity
+        )
         
         # Calculate number of measurements based on granularity
         days_diff = (end_date - start_date).days + 1

@@ -50,6 +50,46 @@ jobs:
           git tag -a "v${{ steps.get_version.outputs.version }}" -m "Release v${{ steps.get_version.outputs.version }}"
           git push origin "v${{ steps.get_version.outputs.version }}"
 
+      - name: Get previous tag
+        id: get_previous_tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD 2>/dev/null || echo "")
+          fi
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREVIOUS_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          PREVIOUS_TAG="${{ steps.get_previous_tag.outputs.previous_tag }}"
+          CURRENT_SHA="${{ github.event.workflow_run.head_sha }}"
+          
+          if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "" ]; then
+            # First release - get all commits
+            git log --pretty=format:"- %s (%h)" --reverse > changelog.txt
+          else
+            # Get commits since last tag
+            git log ${PREVIOUS_TAG}..${CURRENT_SHA} --pretty=format:"- %s (%h)" --reverse > changelog.txt
+          fi
+          
+          if [ ! -s changelog.txt ]; then
+            echo "- No commits found" > changelog.txt
+          fi
+          
+          # Use delimiter to handle multiline output
+          {
+            echo 'changelog<<EOF'
+            cat changelog.txt
+            echo EOF
+          } >> $GITHUB_OUTPUT
+          
+          echo "Generated changelog:"
+          cat changelog.txt
+
       - name: Create release
         if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v1
@@ -59,13 +99,32 @@ jobs:
           body: |
             ## Release v${{ steps.get_version.outputs.version }}
 
-            This release was automatically created after successful validation.
+            ### 📦 What's Changed
 
-            ### Changes
-            See [commits](https://github.com/${{ github.repository }}/compare/${{ github.event.workflow_run.head_sha }}...HEAD) for details.
+            ${{ steps.changelog.outputs.changelog }}
 
-            ### Installation
-            Install via HACS or download from [releases](https://github.com/${{ github.repository }}/releases).
+            ### 📥 Installation
+
+            **Via HACS:**
+            1. Open HACS → Integrations
+            2. Click the three dots menu → Custom repositories
+            3. Add this repository URL
+            4. Search for "Octopus Energy España" and install
+            5. Restart Home Assistant
+
+            **Manual Installation:**
+            1. Download the [latest release](https://github.com/${{ github.repository }}/releases/latest)
+            2. Extract `custom_components/octopus_energy_es` to your Home Assistant `custom_components` directory
+            3. Restart Home Assistant
+
+            ### 🔗 Links
+
+            - [Full Changelog](https://github.com/${{ github.repository }}/compare/${{ steps.get_previous_tag.outputs.previous_tag }}...v${{ steps.get_version.outputs.version }})
+            - [Documentation](https://github.com/${{ github.repository }}#readme)
+            - [Report Issues](https://github.com/${{ github.repository }}/issues)
+
+            ---
+            *This release was automatically created after successful validation.*
           draft: false
           prerelease: false
 
