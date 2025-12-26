@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -57,82 +58,91 @@ def _parse_datetime_to_madrid(dt_str: str) -> datetime | None:
         return None
 
 PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="price",
-    name="Price",
+    key="octopus_energy_es_average_price",
+    name="Average Price (24h)",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=3,
+    icon="mdi:chart-timeline-variant",
 )
 
 CURRENT_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="current_price",
+    key="octopus_energy_es_current_price",
     name="Current Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:cash",
 )
 
 MIN_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="min_price",
+    key="octopus_energy_es_min_price",
     name="Min Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:trending-down",
 )
 
 MAX_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="max_price",
+    key="octopus_energy_es_max_price",
     name="Max Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:trending-up",
 )
 
 CHEAPEST_HOUR_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="cheapest_hour",
+    key="octopus_energy_es_cheapest_hour",
     name="Cheapest Hour",
     icon="mdi:clock-outline",
 )
 
 DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="daily_consumption",
+    key="octopus_energy_es_daily_consumption",
     name="Daily Consumption",
     native_unit_of_measurement="kWh",
-    state_class=SensorStateClass.TOTAL_INCREASING,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
 )
 
 HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="hourly_consumption",
+    key="octopus_energy_es_hourly_consumption",
     name="Hourly Consumption",
     native_unit_of_measurement="kWh",
-    state_class=SensorStateClass.MEASUREMENT,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
 )
 
 MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="monthly_consumption",
+    key="octopus_energy_es_monthly_consumption",
     name="Monthly Consumption",
     native_unit_of_measurement="kWh",
-    state_class=SensorStateClass.TOTAL_INCREASING,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
 )
 
 WEEKLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="weekly_consumption",
+    key="octopus_energy_es_weekly_consumption",
     name="Weekly Consumption",
     native_unit_of_measurement="kWh",
-    state_class=SensorStateClass.TOTAL_INCREASING,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
 )
 
 YEARLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="yearly_consumption",
+    key="octopus_energy_es_yearly_consumption",
     name="Yearly Consumption",
     native_unit_of_measurement="kWh",
-    state_class=SensorStateClass.TOTAL_INCREASING,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
 )
 
 DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="daily_cost",
+    key="octopus_energy_es_daily_cost",
     name="Daily Cost",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
@@ -140,7 +150,7 @@ DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
 )
 
 LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="last_invoice",
+    key="octopus_energy_es_last_invoice",
     name="Last Invoice",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
@@ -148,13 +158,13 @@ LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
 )
 
 BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="billing_period",
+    key="octopus_energy_es_billing_period",
     name="Billing Period",
     icon="mdi:calendar-range",
 )
 
 CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="credits",
+    key="octopus_energy_es_credits",
     name="Credits",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
@@ -162,22 +172,22 @@ CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
 )
 
 CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="credits_estimated",
-    name="Credits Estimated",
+    key="octopus_energy_es_credits_estimated",
+    name="Credits (Estimated)",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:currency-eur",
 )
 
 ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="account",
+    key="octopus_energy_es_account",
     name="Account",
     icon="mdi:account",
 )
 
 NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="next_invoice_estimated",
-    name="Next Invoice Estimated",
+    key="octopus_energy_es_next_invoice_estimated",
+    name="Next Invoice (Estimated)",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:receipt-text",
@@ -474,6 +484,9 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
         
         if self._consumption_date:
             attrs["consumption_date"] = self._consumption_date.isoformat()
+            # Set last_reset to the start of the day (midnight) for Energy Dashboard compatibility
+            day_start = datetime.combine(self._consumption_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            attrs["last_reset"] = day_start.isoformat()
         attrs["is_today"] = self._is_today
         
         if self._data_available_until:
@@ -552,6 +565,8 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_datetime:
             attrs["consumption_datetime"] = self._consumption_datetime.isoformat()
+            # Set last_reset to the start of the hour period for Energy Dashboard compatibility
+            attrs["last_reset"] = self._consumption_datetime.isoformat()
         attrs["is_current_hour"] = self._is_current_hour
 
         if self._data_available_until:
@@ -633,6 +648,9 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         if self._consumption_month:
             year, month = self._consumption_month
             attrs["consumption_month"] = f"{year:04d}-{month:02d}"
+            # Set last_reset to the start of the month (first day at midnight) for Energy Dashboard compatibility
+            month_start = datetime(year, month, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            attrs["last_reset"] = month_start.isoformat()
         attrs["is_current_month"] = self._is_current_month
 
         if self._data_available_until:
@@ -744,6 +762,9 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_week_start:
             attrs["consumption_week_start"] = self._consumption_week_start.isoformat()
+            # Set last_reset to the start of the week (midnight of week start date) for Energy Dashboard compatibility
+            week_start_dt = datetime.combine(self._consumption_week_start, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            attrs["last_reset"] = week_start_dt.isoformat()
         if self._consumption_week_end:
             attrs["consumption_week_end"] = self._consumption_week_end.isoformat()
         attrs["is_current_week"] = self._is_current_week
@@ -824,6 +845,9 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_year:
             attrs["consumption_year"] = f"{self._consumption_year:04d}"
+            # Set last_reset to the start of the year (January 1st at midnight) for Energy Dashboard compatibility
+            year_start = datetime(self._consumption_year, 1, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            attrs["last_reset"] = year_start.isoformat()
         attrs["is_current_year"] = self._is_current_year
 
         if self._data_available_until:
