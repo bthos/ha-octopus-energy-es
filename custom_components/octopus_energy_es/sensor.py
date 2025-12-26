@@ -259,6 +259,17 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
             "model": coordinator._entry.data.get("pricing_model", "Unknown"),
         }
 
+    @property
+    def _has_data(self) -> bool:
+        """Check if coordinator has successfully updated and has data."""
+        # Check if coordinator has never successfully updated
+        if not self.coordinator.last_update_success:
+            return False
+        # Check if coordinator.data exists
+        if self.coordinator.data is None:
+            return False
+        return True
+
 
 
 class OctopusEnergyESPriceSensor(OctopusEnergyESSensor):
@@ -267,8 +278,7 @@ class OctopusEnergyESPriceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return the average price for current day."""
-        if not self.coordinator.data:
-            _LOGGER.debug("Coordinator data is None or empty")
+        if not self._has_data:
             return None
             
         data = self.coordinator.data
@@ -349,6 +359,9 @@ class OctopusEnergyESCurrentPriceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return the current price."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
 
@@ -373,6 +386,9 @@ class OctopusEnergyESMinPriceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return the minimum price."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
 
@@ -388,6 +404,9 @@ class OctopusEnergyESMaxPriceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return the maximum price."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
 
@@ -403,6 +422,9 @@ class OctopusEnergyESCheapestHourSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> str | None:
         """Return the cheapest hour."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
 
@@ -427,6 +449,9 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return daily consumption (today's if available, otherwise most recent available)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
@@ -508,6 +533,9 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return hourly consumption (current hour's if available, otherwise most recent available)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
@@ -588,6 +616,9 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return monthly consumption (current month's if available, otherwise most recent available)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
@@ -674,6 +705,9 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return weekly consumption (current week's if available, otherwise most recent available 7-day period)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
@@ -788,6 +822,9 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return yearly consumption (current year's if available, otherwise most recent available)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
 
@@ -870,6 +907,9 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return daily cost (today's if available, otherwise most recent available)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         prices = data.get("today_prices", [])
         consumption = data.get("consumption", [])
@@ -1030,6 +1070,9 @@ class OctopusEnergyESLastInvoiceSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return last invoice amount."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         billing = data.get("billing", {})
 
@@ -1116,6 +1159,9 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return estimated next invoice amount."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         billing = data.get("billing", {})
         consumption = data.get("consumption", [])
@@ -1339,6 +1385,9 @@ class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> str | None:
         """Return billing period as string."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         billing = data.get("billing", {})
 
@@ -1364,6 +1413,9 @@ class OctopusEnergyESCreditsSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return credits (last month's credits)."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         credits = data.get("credits", {})
 
@@ -1430,6 +1482,9 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> float | None:
         """Return estimated credits for current month based on consumption during discount hours."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         consumption = data.get("consumption", [])
         prices = data.get("today_prices", [])
@@ -1538,6 +1593,9 @@ class OctopusEnergyESAccountSensor(OctopusEnergyESSensor):
     @property
     def native_value(self) -> str | None:
         """Return account ID."""
+        if not self._has_data:
+            return None
+            
         data = self.coordinator.data
         account = data.get("account", {})
         
