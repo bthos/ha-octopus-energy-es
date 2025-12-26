@@ -45,14 +45,21 @@ class OctopusClient:
             await self._session.close()
             self._session = None
 
-    async def _authenticate(self) -> str:
+    async def _authenticate(self, force: bool = False) -> str:
         """
         Authenticate with Octopus Energy España GraphQL API and return auth token.
 
         Uses GraphQL mutation: obtainKrakenToken
+        
+        Args:
+            force: If True, force re-authentication even if token exists
         """
-        if self._auth_token:
+        if self._auth_token and not force:
             return self._auth_token
+        
+        # Clear existing token if forcing re-authentication
+        if force:
+            self._auth_token = None
 
         mutation = """
            mutation obtainKrakenToken($input: ObtainJSONWebTokenInput!) {
@@ -144,6 +151,68 @@ class OctopusClient:
             headers={"authorization": token}
         )
 
+    async def _execute_graphql_with_retry(
+        self, query: str, variables: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """
+        Execute GraphQL query with automatic token refresh on expiration.
+        
+        Args:
+            query: GraphQL query string
+            variables: Query variables
+            
+        Returns:
+            GraphQL response dictionary
+            
+        Raises:
+            OctopusClientError: If query fails after retry
+        """
+        variables = variables or {}
+        max_retries = 2
+        
+        for attempt in range(max_retries):
+            try:
+                client = await self._get_graphql_client()
+                response = await client.execute_async(query, variables)
+                
+                # Check for token expiration errors
+                if "errors" in response:
+                    errors = response["errors"]
+                    error_messages = [str(err) for err in errors]
+                    error_text = " ".join(error_messages).lower()
+                    
+                    # Check if it's a token expiration error
+                    if any(phrase in error_text for phrase in [
+                        "refresh token cookie not found",
+                        "token expired",
+                        "authentication",
+                        "unauthorized",
+                        "invalid token"
+                    ]):
+                        if attempt < max_retries - 1:
+                            _LOGGER.debug("Token expired, re-authenticating (attempt %d/%d)", attempt + 1, max_retries)
+                            # Force re-authentication
+                            await self._authenticate(force=True)
+                            # Retry the query
+                            continue
+                        else:
+                            _LOGGER.error("Authentication failed after %d attempts", max_retries)
+                            raise OctopusClientError("Authentication token expired and re-authentication failed")
+                
+                return response
+                
+            except Exception as err:
+                if attempt < max_retries - 1:
+                    error_msg = str(err).lower()
+                    # Check if it might be a token issue
+                    if any(phrase in error_msg for phrase in [
+                        "401", "unauthorized", "authentication", "token"
+                    ]):
+                        _LOGGER.debug("Possible authentication error, re-authenticating (attempt %d/%d)", attempt + 1, max_retries)
+                        await self._authenticate(force=True)
+                        continue
+                raise
+
     async def _fetch_property_id(self) -> str | None:
         """
         Fetch property ID for the account.
@@ -174,8 +243,7 @@ class OctopusClient:
                 return None
         
         try:
-            client = await self._get_graphql_client()
-            response = await client.execute_async(query, {"accountNumber": account})
+            response = await self._execute_graphql_with_retry(query, {"accountNumber": account})
             
             if "errors" in response:
                 _LOGGER.error("GraphQL error fetching properties: %s", response["errors"])
@@ -424,8 +492,6 @@ class OctopusClient:
         after: str | None = None
         
         try:
-            client = await self._get_graphql_client()
-            
             # Fetch all pages
             while True:
                 # Determine reading frequency type based on granularity
@@ -473,7 +539,7 @@ class OctopusClient:
                 if after:
                     variables["after"] = after
                 
-                response = await client.execute_async(query, variables)
+                response = await self._execute_graphql_with_retry(query, variables)
                 
                 if "errors" in response:
                     errors = response["errors"]
@@ -695,8 +761,6 @@ class OctopusClient:
         after: str | None = None
         
         try:
-            client = await self._get_graphql_client()
-            
             # Fetch all pages
             while True:
                 variables: dict[str, Any] = {
@@ -708,7 +772,7 @@ class OctopusClient:
                 if after:
                     variables["after"] = after
                 
-                response = await client.execute_async(query, variables)
+                response = await self._execute_graphql_with_retry(query, variables)
                 
                 if "errors" in response:
                     error_msg = str(response["errors"])
@@ -848,8 +912,7 @@ class OctopusClient:
                 raise OctopusClientError("No account number available")
 
         try:
-            client = await self._get_graphql_client()
-            response = await client.execute_async(query, {"account": account})
+            response = await self._execute_graphql_with_retry(query, {"account": account})
 
             if "errors" in response:
                 _LOGGER.error("GraphQL error fetching billing: %s", response["errors"])
@@ -1002,8 +1065,6 @@ class OctopusClient:
         after: str | None = None
         
         try:
-            client = await self._get_graphql_client()
-            
             # Fetch all pages of credits
             while True:
                 variables: dict[str, Any] = {
@@ -1015,7 +1076,7 @@ class OctopusClient:
                 if after is not None:
                     variables["after"] = after
                 
-                response = await client.execute_async(query, variables)
+                response = await self._execute_graphql_with_retry(query, variables)
                 
                 if "errors" in response:
                     _LOGGER.error("GraphQL error fetching credits: %s", response["errors"])
@@ -1182,8 +1243,7 @@ class OctopusClient:
         """
 
         try:
-            client = await self._get_graphql_client()
-            response = await client.execute_async(query)
+            response = await self._execute_graphql_with_retry(query)
 
             if "errors" in response:
                 _LOGGER.error("GraphQL error fetching accounts: %s", response["errors"])
@@ -1243,8 +1303,7 @@ class OctopusClient:
                 return None
         
         try:
-            client = await self._get_graphql_client()
-            response = await client.execute_async(query, {"accountNumber": account})
+            response = await self._execute_graphql_with_retry(query, {"accountNumber": account})
             
             if "errors" in response:
                 _LOGGER.error("GraphQL error fetching account info: %s", response["errors"])
