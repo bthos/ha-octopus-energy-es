@@ -1,0 +1,113 @@
+{
+  "config": {
+    "step": {
+      "pricing_model": {
+        "title": "[%key:octopus_energy_es::config::step::pricing_model::title%]",
+        "description": "[%key:octopus_energy_es::config::step::pricing_model::description%]",
+        "data": {
+          "pricing_model": "[%key:octopus_energy_es::config::step::pricing_model::data::pricing_model%]"
+        }
+      },
+      "time_structure": {
+        "title": "[%key:octopus_energy_es::config::step::time_structure::title%]",
+        "description": "[%key:octopus_energy_es::config::step::time_structure::description%]",
+        "data": {
+          "time_structure": "[%key:octopus_energy_es::config::step::time_structure::data::time_structure%]"
+        }
+      },
+      "octopus_credentials": {
+        "title": "[%key:octopus_energy_es::config::step::octopus_credentials::title%]",
+        "description": "[%key:octopus_energy_es::config::step::octopus_credentials::description%]",
+        "data": {
+          "email": "[%key:octopus_energy_es::config::step::octopus_credentials::data::email%]",
+          "password": "[%key:octopus_energy_es::config::step::octopus_credentials::data::password%]"
+        }
+      },
+      "select_property": {
+        "title": "[%key:octopus_energy_es::config::step::select_property::title%]",
+        "description": "[%key:octopus_energy_es::config::step::select_property::description%]",
+        "data": {
+          "property_id": "[%key:octopus_energy_es::config::step::select_property::data::property_id%]"
+        }
+      },
+      "manual_account": {
+        "title": "[%key:octopus_energy_es::config::step::manual_account::title%]",
+        "description": "[%key:octopus_energy_es::config::step::manual_account::description%]",
+        "data": {
+          "property_id": "[%key:octopus_energy_es::config::step::manual_account::data::property_id%]"
+        }
+      },
+      "energy_rates": {
+        "title": "[%key:octopus_energy_es::config::step::energy_rates::title%]",
+        "description": "[%key:octopus_energy_es::config::step::energy_rates::description%]",
+        "data": {
+          "fixed_rate": "[%key:octopus_energy_es::config::step::energy_rates::data::fixed_rate%]",
+          "p1_rate": "[%key:octopus_energy_es::config::step::energy_rates::data::p1_rate%]",
+          "p2_rate": "[%key:octopus_energy_es::config::step::energy_rates::data::p2_rate%]",
+          "p3_rate": "[%key:octopus_energy_es::config::step::energy_rates::data::p3_rate%]",
+          "management_fee_monthly": "[%key:octopus_energy_es::config::step::energy_rates::data::management_fee_monthly%]"
+        }
+      },
+      "power_rates": {
+        "title": "[%key:octopus_energy_es::config::step::power_rates::title%]",
+        "description": "[%key:octopus_energy_es::config::step::power_rates::description%]",
+        "data": {
+          "power_p1_rate": "[%key:octopus_energy_es::config::step::power_rates::data::power_p1_rate%]",
+          "power_p2_rate": "[%key:octopus_energy_es::config::step::power_rates::data::power_p2_rate%]"
+        }
+      },
+      "solar_features": {
+        "title": "[%key:octopus_energy_es::config::step::solar_features::title%]",
+        "description": "[%key:octopus_energy_es::config::step::solar_features::description%]",
+        "data": {
+          "has_solar": "[%key:octopus_energy_es::config::step::solar_features::data::has_solar%]",
+          "solar_surplus_rate": "[%key:octopus_energy_es::config::step::solar_features::data::solar_surplus_rate%]"
+        }
+      },
+      "discount_programs": {
+        "title": "[%key:octopus_energy_es::config::step::discount_programs::title%]",
+        "description": "[%key:octopus_energy_es::config::step::discount_programs::description%]",
+        "data": {
+          "has_discount": "[%key:octopus_energy_es::config::step::discount_programs::data::has_discount%]",
+          "discount_start_hour": "[%key:octopus_energy_es::config::step::discount_programs::data::discount_start_hour%]",
+          "discount_end_hour": "[%key:octopus_energy_es::config::step::discount_programs::data::discount_end_hour%]",
+          "discount_percentage": "[%key:octopus_energy_es::config::step::discount_programs::data::discount_percentage%]"
+        }
+      },
+      "other_concepts": {
+        "title": "[%key:octopus_energy_es::config::step::other_concepts::title%]",
+        "description": "[%key:octopus_energy_es::config::step::other_concepts::description%]",
+        "data": {
+          "has_other_concepts": "[%key:octopus_energy_es::config::step::other_concepts::data::has_other_concepts%]",
+          "other_concepts_rate": "[%key:octopus_energy_es::config::step::other_concepts::data::other_concepts_rate%]"
+        }
+      },
+      "taxes": {
+        "title": "[%key:octopus_energy_es::config::step::taxes::title%]",
+        "description": "[%key:octopus_energy_es::config::step::taxes::description%]",
+        "data": {
+          "electricity_tax_rate": "[%key:octopus_energy_es::config::step::taxes::data::electricity_tax_rate%]",
+          "vat_rate": "[%key:octopus_energy_es::config::step::taxes::data::vat_rate%]"
+        }
+      },
+      "pvpc_sensor": {
+        "title": "[%key:octopus_energy_es::config::step::pvpc_sensor::title%]",
+        "description": "[%key:octopus_energy_es::config::step::pvpc_sensor::description%]",
+        "data": {
+          "pvpc_sensor": "[%key:octopus_energy_es::config::step::pvpc_sensor::data::pvpc_sensor%]"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "email_password_required": "[%key:octopus_energy_es::config::error::email_password_required%]",
+      "no_accounts_found": "[%key:octopus_energy_es::config::error::no_accounts_found%]",
+      "account_number_required": "[%key:octopus_energy_es::config::error::account_number_required%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  }
+}

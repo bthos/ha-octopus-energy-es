@@ -128,21 +128,21 @@ If you selected Fixed pricing, choose your time structure:
 - **Single Rate**: Enter your fixed rate in €/kWh
 - **Time-of-Use**: Enter rates for each period:
   - **P1 Rate**: Peak period rate (€/kWh)
-  - **P2 Rate**: Standard period rate (€/kWh)
-  - **P3 Rate**: Valley period rate (€/kWh)
+  - **P2 Rate**: Flat period rate (€/kWh)
+  - **P3 Rate**: Base period rate (€/kWh)
   - **Management Fee**: Monthly management fee (€/month)
 
 **Default time-of-use periods (weekdays):**
 - **P1 (Peak)**: 11:00-14:00 & 19:00-22:00
-- **P2 (Standard)**: 09:00-10:00, 15:00-18:00, 23:00
-- **P3 (Valley)**: 00:00-08:00
-- **Weekends/Holidays**: All hours are P3 (Valley)
+- **P2 (Flat)**: 09:00-10:00, 15:00-18:00, 23:00
+- **P3 (Base)**: 00:00-08:00
+- **Weekends/Holidays**: All hours are P3 (Base)
 
 ### Step 5: Power Rates (Optional)
 
 Configure power (potencia) rates:
 - **Power P1 Rate**: Peak period power rate (€/kW/day)
-- **Power P2 Rate**: Valley period power rate (€/kW/day)
+- **Power P2 Rate**: Base period power rate (€/kW/day)
 
 ### Step 6: Solar Features (Optional)
 
