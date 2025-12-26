@@ -1,0 +1,114 @@
+{
+  "config": {
+    "step": {
+      "pricing_model": {
+        "title": "Modelo de Precios",
+        "description": "Seleccione su modelo de precios",
+        "data": {
+          "pricing_model": "Modelo de Precios"
+        }
+      },
+      "time_structure": {
+        "title": "Estructura Temporal",
+        "description": "Seleccione su estructura temporal para precios fijos",
+        "data": {
+          "time_structure": "Estructura Temporal"
+        }
+      },
+      "octopus_credentials": {
+        "title": "Credenciales de Octopus Energy España",
+        "description": "Introduzca sus credenciales de cuenta de Octopus Energy España.\n\nSu número de cuenta se detectará automáticamente después de la autenticación. Si tiene varias cuentas, podrá seleccionar cuál usar.",
+        "data": {
+          "email": "Correo electrónico",
+          "password": "Contraseña"
+        }
+      },
+      "select_property": {
+        "title": "Seleccionar Cuenta",
+        "description": "Se encontraron varias cuentas. Por favor, seleccione la cuenta que desea monitorizar.",
+        "data": {
+          "property_id": "Cuenta"
+        }
+      },
+      "manual_account": {
+        "title": "Introducir Número de Cuenta",
+        "description": "La detección automática de cuenta falló. Por favor, introduzca su número de cuenta de Octopus Energy España manualmente.\n\nPuede encontrar su número de cuenta:\n• Iniciando sesión en octopusenergy.es y consultando su panel de cuenta\n• Revisando su factura de Octopus Energy España\n• Consultando la aplicación móvil de Octopus Energy España",
+        "data": {
+          "property_id": "Número de Cuenta"
+        }
+      },
+      "energy_rates": {
+        "title": "Tarifas de Energía",
+        "description": "Configure las tarifas de consumo de energía.\n\n⚠️ Importante: Introduzca todas las tarifas como precio sin impuestos. Los impuestos se calcularán automáticamente.",
+        "data": {
+          "fixed_rate": "Tarifa Fija (€/kWh, sin impuestos)",
+          "p1_rate": "Energía P1 (Punta) (€/kWh, sin impuestos)",
+          "p2_rate": "Energía P2 (Llano) (€/kWh, sin impuestos)",
+          "p3_rate": "Energía P3 (Valle) (€/kWh, sin impuestos)",
+          "management_fee_monthly": "Cuota de Gestión Mensual (€/mes, sin impuestos)"
+        }
+      },
+      "power_rates": {
+        "title": "Tarifas de Potencia",
+        "description": "Configure las tarifas de potencia. Las tarifas de potencia siempre son de discriminación horaria con estructura P1/P2.",
+        "data": {
+          "power_p1_rate": "Potencia P1 (Punta) (€/kW/día, sin impuestos)",
+          "power_p2_rate": "Potencia P2 (Llano) (€/kW/día, sin impuestos)"
+        }
+      },
+      "solar_features": {
+        "title": "Características Solares",
+        "description": "Configure la compensación de excedentes solares si aplica.\n\nℹ️ La compensación se devolverá al saldo de su Monedero Solar.",
+        "data": {
+          "has_solar": "¿Tiene paneles solares?",
+          "solar_surplus_rate": "Tarifa de Compensación de Excedentes Solares (€/kWh)"
+        }
+      },
+      "discount_programs": {
+        "title": "Programas de Descuento",
+        "description": "Configure programas de descuento si aplica.\n\nℹ️ Por ejemplo, si está en el programa SUN CLUB que le da un 45% de descuento de 12:00 a 18:00, puede configurarlo aquí.",
+        "data": {
+          "has_discount": "¿Activar programa de descuento?",
+          "discount_start_hour": "Hora de Inicio del Descuento (0-23)",
+          "discount_end_hour": "Hora de Fin del Descuento (0-23)",
+          "discount_percentage": "Porcentaje de Descuento (0-1, ej., 0.45 para 45%)"
+        }
+      },
+      "other_concepts": {
+        "title": "Otros Conceptos",
+        "description": "Configure otros conceptos si aplica. Esto puede incluir Bono Social, Alquiler de Equipos, etc.",
+        "data": {
+          "has_other_concepts": "¿Tiene otros conceptos?",
+          "other_concepts_rate": "Tarifa Total de Otros Conceptos (€/día, sin impuestos)"
+        }
+      },
+      "taxes": {
+        "title": "Impuestos",
+        "description": "Configure los impuestos. Los valores por defecto son las tasas de impuestos estándar españolas.",
+        "data": {
+          "electricity_tax_rate": "Tasa del Impuesto Eléctrico (0-1, ej., 0.0511 para 5,11%)",
+          "vat_rate": "Tasa de IVA (0-1, ej., 0.21 para 21,00%)"
+        }
+      },
+      "pvpc_sensor": {
+        "title": "Sensor de Precios PVPC",
+        "description": "Seleccione el sensor de Precios Horarios PVPC para usar datos de precios del mercado.\n\nAsegúrese de tener configurada la integración de Precios Horarios PVPC. El sensor por defecto es 'sensor.pvpc'.",
+        "data": {
+          "pvpc_sensor": "ID de Entidad del Sensor PVPC"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se puede conectar a la API de Octopus Energy España. Por favor, compruebe su conexión a internet e intente de nuevo.",
+      "invalid_auth": "El correo electrónico o la contraseña introducidos son incorrectos. Por favor, compruebe sus credenciales e intente de nuevo. Asegúrese de estar usando sus credenciales de cuenta de Octopus Energy España.",
+      "email_password_required": "El correo electrónico y la contraseña son obligatorios para continuar.",
+      "no_accounts_found": "La autenticación fue exitosa pero no se encontraron cuentas. Por favor, compruebe que su cuenta tiene acceso a al menos una cuenta de Octopus Energy España. Puede necesitar contactar con el soporte de Octopus Energy España si este problema persiste.",
+      "account_number_required": "Por favor, introduzca su número de cuenta para continuar.",
+      "unknown": "Ocurrió un error inesperado. Por favor, compruebe los registros de Home Assistant para más detalles e intente de nuevo."
+    },
+    "abort": {
+      "already_configured": "Octopus Energy España ya está configurado"
+    }
+  }
+}
+

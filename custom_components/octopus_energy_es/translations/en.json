@@ -16,7 +16,7 @@
         }
       },
       "octopus_credentials": {
-        "title": "Octopus Energy Credentials",
+        "title": "Octopus Energy España Credentials",
         "description": "Enter your Octopus Energy España account credentials.\n\nYour account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use.",
         "data": {
           "email": "Email",
@@ -32,7 +32,7 @@
       },
       "manual_account": {
         "title": "Enter Account Number",
-        "description": "Account auto-detection failed. Please enter your Octopus Energy account number manually.\n\nYou can find your account number by:\n• Logging into octopusenergy.es and checking your account dashboard\n• Looking at your Octopus Energy invoice\n• Checking the Octopus Energy mobile app",
+        "description": "Account auto-detection failed. Please enter your Octopus Energy España account number manually.\n\nYou can find your account number by:\n• Logging into octopusenergy.es and checking your account dashboard\n• Looking at your Octopus Energy España invoice\n• Checking the Octopus Energy España mobile app",
         "data": {
           "property_id": "Account Number"
         }
@@ -42,23 +42,23 @@
         "description": "Configure energy consumption rates.\n\n⚠️ Important: Enter all rates as price without taxes. Taxes will be calculated automatically.",
         "data": {
           "fixed_rate": "Fixed Rate (€/kWh, without taxes)",
-          "p1_rate": "P1 Rate (€/kWh, without taxes)",
-          "p2_rate": "P2 Rate (€/kWh, without taxes)",
-          "p3_rate": "P3 Rate (€/kWh, without taxes)",
-          "management_fee_monthly": "Management Fee Monthly (€/month)"
+          "p1_rate": "Energy P1 (Peak) Rate (€/kWh, without taxes)",
+          "p2_rate": "Energy P2 (Plain) Rate (€/kWh, without taxes)",
+          "p3_rate": "Energy P3 (Valley) Rate (€/kWh, without taxes)",
+          "management_fee_monthly": "Management Fee Monthly (€/month, without taxes)"
         }
       },
       "power_rates": {
         "title": "Power Rates",
-        "description": "Configure power (potencia) rates. Power rates are always time-of-use with P1/P2 structure.",
+        "description": "Configure power rates. Power rates are always time-of-use with P1/P2 structure.",
         "data": {
-          "power_p1_rate": "Power P1 Rate (€/kW/day)",
-          "power_p2_rate": "Power P2 Rate (€/kW/day)"
+          "power_p1_rate": "Power P1 (Peak) Rate (€/kW/day, without taxes)",
+          "power_p2_rate": "Power P2 (Plain) Rate (€/kW/day, without taxes)"
         }
       },
       "solar_features": {
         "title": "Solar Features",
-        "description": "Configure solar panel features if applicable",
+        "description": "Configure solar surplus compensation if applicable.\n\nℹ️ Compensation will be returned to your Solar Wallet balance.",
         "data": {
           "has_solar": "Do you have solar panels?",
           "solar_surplus_rate": "Solar Surplus Compensation Rate (€/kWh)"
@@ -66,12 +66,12 @@
       },
       "discount_programs": {
         "title": "Discount Programs",
-        "description": "Configure discount programs if applicable",
+        "description": "Configure discount programs if applicable.\n\nℹ️ For example, if you are in SUN CLUB program that gives you a 45% discount from 12:00 to 18:00, you can configure it here.",
         "data": {
           "has_discount": "Enable discount program?",
           "discount_start_hour": "Discount Start Hour (0-23)",
           "discount_end_hour": "Discount End Hour (0-23)",
-          "discount_percentage": "Discount Percentage (0-1)"
+          "discount_percentage": "Discount Percentage (0-1, e.g., 0.45 for 45%)"
         }
       },
       "other_concepts": {
@@ -79,15 +79,15 @@
         "description": "Configure other concepts if applicable. This may include Bono Social, Equipment Rental, etc.",
         "data": {
           "has_other_concepts": "Do you have other concepts?",
-          "other_concepts_rate": "Other Concepts Rate (€/day)"
+          "other_concepts_rate": "Total Other Concepts Rate (€/day, without taxes)"
         }
       },
       "taxes": {
         "title": "Taxes",
-        "description": "Configure taxes. Default values are standard Spanish electricity taxes.",
+        "description": "Configure taxes. Default values are standard Spanish tax rates.",
         "data": {
           "electricity_tax_rate": "Electricity Tax Rate (0-1, e.g., 0.0511 for 5.11%)",
-          "vat_rate": "IVA Rate (0-1, e.g., 0.21 for 21.00%)"
+          "vat_rate": "VAT Rate (0-1, e.g., 0.21 for 21.00%)"
         }
       },
       "pvpc_sensor": {
@@ -99,10 +99,10 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to Octopus Energy API. Please check your internet connection and try again.",
+      "cannot_connect": "Unable to connect to Octopus Energy España API. Please check your internet connection and try again.",
       "invalid_auth": "The email or password you entered is incorrect. Please check your credentials and try again. Make sure you're using your Octopus Energy España account credentials.",
       "email_password_required": "Email and password are required to continue.",
-      "no_accounts_found": "Authentication succeeded but no accounts were found. Please check that your account has access to at least one Octopus Energy España account. You may need to contact Octopus Energy support if this issue persists.",
+      "no_accounts_found": "Authentication succeeded but no accounts were found. Please check that your account has access to at least one Octopus Energy España account. You may need to contact Octopus Energy España support if this issue persists.",
       "account_number_required": "Please enter your account number to continue.",
       "unknown": "An unexpected error occurred. Please check the Home Assistant logs for more details and try again."
     },
@@ -111,4 +111,3 @@
     }
   }
 }
-
