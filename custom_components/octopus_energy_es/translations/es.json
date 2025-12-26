@@ -42,9 +42,9 @@
         "description": "Configure las tarifas de consumo de energía.\n\n⚠️ Importante: Introduzca todas las tarifas como precio sin impuestos. Los impuestos se calcularán automáticamente.",
         "data": {
           "fixed_rate": "Tarifa Fija (€/kWh, sin impuestos)",
-          "p1_rate": "Energía P1 (Punta) (€/kWh, sin impuestos)",
-          "p2_rate": "Energía P2 (Llano) (€/kWh, sin impuestos)",
-          "p3_rate": "Energía P3 (Valle) (€/kWh, sin impuestos)",
+          "p1_rate": "Punta (P1) (€/kWh, sin impuestos)",
+          "p2_rate": "Llano (P2) (€/kWh, sin impuestos)",
+          "p3_rate": "Valle (P3) (€/kWh, sin impuestos)",
           "management_fee_monthly": "Cuota de Gestión Mensual (€/mes, sin impuestos)"
         }
       },
@@ -52,8 +52,8 @@
         "title": "Tarifas de Potencia",
         "description": "Configure las tarifas de potencia. Las tarifas de potencia siempre son de discriminación horaria con estructura P1/P2.",
         "data": {
-          "power_p1_rate": "Potencia P1 (Punta) (€/kW/día, sin impuestos)",
-          "power_p2_rate": "Potencia P2 (Llano) (€/kW/día, sin impuestos)"
+          "power_p1_rate": "Punta (P1) (€/kW/día, sin impuestos)",
+          "power_p2_rate": "Valle (P2) (€/kW/día, sin impuestos)"
         }
       },
       "solar_features": {

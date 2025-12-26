@@ -42,9 +42,9 @@
         "description": "Configure energy consumption rates.\n\n⚠️ Important: Enter all rates as price without taxes. Taxes will be calculated automatically.",
         "data": {
           "fixed_rate": "Fixed Rate (€/kWh, without taxes)",
-          "p1_rate": "Energy P1 (Peak) Rate (€/kWh, without taxes)",
-          "p2_rate": "Energy P2 (Plain) Rate (€/kWh, without taxes)",
-          "p3_rate": "Energy P3 (Valley) Rate (€/kWh, without taxes)",
+          "p1_rate": "Peak (P1) (€/kWh, without taxes)",
+          "p2_rate": "Flat (P2) (€/kWh, without taxes)",
+          "p3_rate": "Base (P3) (€/kWh, without taxes)",
           "management_fee_monthly": "Management Fee Monthly (€/month, without taxes)"
         }
       },
@@ -52,8 +52,8 @@
         "title": "Power Rates",
         "description": "Configure power rates. Power rates are always time-of-use with P1/P2 structure.",
         "data": {
-          "power_p1_rate": "Power P1 (Peak) Rate (€/kW/day, without taxes)",
-          "power_p2_rate": "Power P2 (Plain) Rate (€/kW/day, without taxes)"
+          "power_p1_rate": "Peak (P1) (€/kW/day, without taxes)",
+          "power_p2_rate": "Base (P2) (€/kW/day, without taxes)"
         }
       },
       "solar_features": {
