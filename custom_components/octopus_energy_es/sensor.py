@@ -1801,6 +1801,41 @@ class OctopusEnergyESCreditsSensor(OctopusEnergyESSensor):
 class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
     """Estimated credits sensor (calculates future credits based on consumption during discounted hours)."""
 
+    def _get_base_price_for_hour(
+        self, target_date: date, target_hour: int, prices: list[dict[str, Any]]
+    ) -> float | None:
+        """Get base price (before discount) for a specific hour and date."""
+        entry = self.coordinator._entry
+        tariff_calculator = self.coordinator._tariff_calculator
+        pricing_model = entry.data.get("pricing_model", PRICING_MODEL_MARKET)
+        
+        # For fixed tariffs, use tariff calculator to get the rate
+        if pricing_model == PRICING_MODEL_FIXED:
+            target_dt = datetime.combine(target_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            is_weekday = target_dt.weekday() < 5
+            period, period_rate = tariff_calculator._get_period_for_hour(target_hour, is_weekday)
+            if period_rate is not None:
+                return period_rate
+            # Fallback to fixed_rate
+            if tariff_calculator._config.fixed_rate is not None:
+                return tariff_calculator._config.fixed_rate
+            return None
+        
+        # For market tariffs, try to find base price for the specific date and hour
+        # We need the price BEFORE discount is applied
+        for price in prices:
+            price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+            if price_dt_madrid and price_dt_madrid.date() == target_date and price_dt_madrid.hour == target_hour:
+                # Return the base market price (before discount)
+                return price.get("price_per_kwh", 0)
+        
+        # Fallback: Use average price from available prices as estimate
+        if prices:
+            avg_price = sum(p.get("price_per_kwh", 0) for p in prices) / len(prices)
+            return avg_price
+        
+        return None
+
     @property
     def native_value(self) -> float | None:
         """Return estimated credits for current month based on consumption during discount hours."""
@@ -1809,9 +1844,9 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
             
         data = self.coordinator.data
         consumption = data.get("consumption", [])
-        prices = data.get("today_prices", [])
+        prices = data.get("today_prices", []) or data.get("tomorrow_prices", [])
 
-        if not consumption or not prices:
+        if not consumption:
             return None
 
         # Get discount configuration from entry
@@ -1820,13 +1855,13 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
         discount_end_hour = entry.data.get(CONF_DISCOUNT_END_HOUR)
         discount_percentage = entry.data.get(CONF_DISCOUNT_PERCENTAGE)
 
-        # If no discount configured, return None
+        # If no discount configured, return 0.0 (not None) to show sensor is working
         if (
             discount_start_hour is None
             or discount_end_hour is None
             or discount_percentage is None
         ):
-            return None
+            return 0.0
 
         # Calculate estimated credits for current month
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
@@ -1842,28 +1877,32 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
                     if item_dt_madrid and item_dt_madrid >= current_month_start:
                         hour = item_dt_madrid.hour
+                        item_date = item_dt_madrid.date()
                         
                         # Check if this hour is within discount period
-                        if discount_start_hour <= hour < discount_end_hour:
+                        # Handle wrap-around (e.g., 22:00-06:00)
+                        is_in_discount_period = False
+                        if discount_start_hour < discount_end_hour:
+                            # Normal case: e.g., 11:00-14:00
+                            is_in_discount_period = discount_start_hour <= hour < discount_end_hour
+                        else:
+                            # Wrap-around case: e.g., 22:00-06:00
+                            is_in_discount_period = hour >= discount_start_hour or hour < discount_end_hour
+                        
+                        if is_in_discount_period:
                             consumption_value = float(
                                 item.get("consumption", item.get("value", 0))
                             )
                             
-                            # Find matching price for this hour
-                            for price in prices:
-                                price_dt_madrid = _parse_datetime_to_madrid(
-                                    price.get("start_time", "")
-                                )
-                                if (
-                                    price_dt_madrid
-                                    and price_dt_madrid.date() == item_dt_madrid.date()
-                                    and price_dt_madrid.hour == hour
-                                ):
-                                    price_per_kwh = price.get("price_per_kwh", 0)
-                                    # Calculate credit: consumption * price * discount_percentage
-                                    credit = consumption_value * price_per_kwh * discount_percentage
+                            if consumption_value > 0:
+                                # Get base price (before discount) for this hour and date
+                                base_price_per_kwh = self._get_base_price_for_hour(item_date, hour, prices)
+                                
+                                if base_price_per_kwh is not None and base_price_per_kwh > 0:
+                                    # Calculate credit: consumption * base_price * discount_percentage
+                                    # This represents the discount amount that will be credited
+                                    credit = consumption_value * base_price_per_kwh * discount_percentage
                                     total_estimated_credits += credit
-                                    break
 
         return round(total_estimated_credits, 2) if total_estimated_credits > 0 else 0.0
 
