@@ -759,7 +759,7 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
 
 
 class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
-    """Monthly consumption sensor."""
+    """Monthly consumption sensor (updates weekly to show cumulative monthly consumption)."""
 
     def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
         """Initialize the monthly consumption sensor."""
@@ -767,10 +767,18 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         self._consumption_month: tuple[int, int] | None = None  # (year, month)
         self._is_current_month: bool = False
         self._data_available_until: tuple[int, int] | None = None  # (year, month)
+        self._last_monthly_update: date | None = None  # Last week start date when state was updated
+        self._cumulative_monthly_total: float = 0.0
+
+    def _get_week_start(self, target_date: date) -> date:
+        """Get the start date of the week containing target_date (Monday = 0)."""
+        # Get Monday of the week
+        days_since_monday = target_date.weekday()
+        return target_date - timedelta(days=days_since_monday)
 
     @property
     def native_value(self) -> float | None:
-        """Return monthly consumption (current month's if available, otherwise most recent available)."""
+        """Return cumulative monthly consumption up to current week (updates weekly)."""
         if not self._has_data:
             return None
             
@@ -781,36 +789,79 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_month = None
             self._is_current_month = False
             self._data_available_until = None
+            self._cumulative_monthly_total = 0.0
             return None
 
-        # Group consumption by month
-        monthly_totals, all_months = _group_consumption_by_month(consumption)
-
-        if not monthly_totals:
-            self._consumption_month = None
-            self._is_current_month = False
-            self._data_available_until = None
-            return None
-
-        # Find the most recent month with data
-        self._data_available_until = all_months[0] if all_months else None
-
-        # Try current month first, then fall back to most recent available month
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
         current_month = now.month
         current_year = now.year
         current_month_key = (current_year, current_month)
         
-        if current_month_key in monthly_totals:
-            self._consumption_month = current_month_key
-            self._is_current_month = True
-            return round(monthly_totals[current_month_key], 3)
-        else:
-            # Use the most recent available month
+        # Get current week start
+        current_week_start = self._get_week_start(today)
+
+        # Group consumption by date to calculate weekly totals
+        daily_totals, all_dates = _group_consumption_by_date(consumption)
+
+        if not daily_totals:
+            self._consumption_month = None
+            self._is_current_month = False
+            self._data_available_until = None
+            self._cumulative_monthly_total = 0.0
+            return None
+
+        # Find the most recent month with data
+        monthly_totals, all_months = _group_consumption_by_month(consumption)
+        self._data_available_until = all_months[0] if all_months else None
+
+        # Check if we should update (only if week has changed or first run)
+        should_update = (
+            self._last_monthly_update is None or
+            self._last_monthly_update != current_week_start
+        )
+
+        if not should_update:
+            # Return cached cumulative total if week hasn't changed
+            return round(self._cumulative_monthly_total, 3)
+
+        # Calculate cumulative monthly consumption up to current week
+        # Sum all days in current month up to today
+        cumulative_total = 0.0
+        month_start = date(current_year, current_month, 1)
+        
+        for check_date in (month_start + timedelta(days=i) for i in range((today - month_start).days + 1)):
+            if check_date <= today and check_date in daily_totals:
+                cumulative_total += daily_totals[check_date]
+
+        # If current month has no data, fall back to most recent available month
+        if cumulative_total == 0.0 and all_months:
             most_recent_month = all_months[0]
+            most_recent_year, most_recent_month_num = most_recent_month
+            month_start = date(most_recent_year, most_recent_month_num, 1)
+            
+            # Get last day of that month
+            if most_recent_month_num == 12:
+                month_end = date(most_recent_year + 1, 1, 1) - timedelta(days=1)
+            else:
+                month_end = date(most_recent_year, most_recent_month_num + 1, 1) - timedelta(days=1)
+            
+            # Sum all days in that month
+            for check_date in (month_start + timedelta(days=i) for i in range((month_end - month_start).days + 1)):
+                if check_date in daily_totals:
+                    cumulative_total += daily_totals[check_date]
+            
             self._consumption_month = most_recent_month
             self._is_current_month = False
-            return round(monthly_totals[most_recent_month], 3)
+        else:
+            self._consumption_month = current_month_key
+            self._is_current_month = True
+
+        # Update tracking
+        self._last_monthly_update = current_week_start
+        self._cumulative_monthly_total = cumulative_total
+
+        return round(cumulative_total, 3)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -827,11 +878,23 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             year, month = self._data_available_until
             attrs["data_available_until"] = f"{year:04d}-{month:02d}"
 
+        if self._last_monthly_update:
+            attrs["last_update_week"] = self._last_monthly_update.isoformat()
+            # Calculate current week number in month (1-5)
+            if self._consumption_month:
+                year, month_num = self._consumption_month
+                month_start = date(year, month_num, 1)
+                week_start = self._get_week_start(self._last_monthly_update)
+                # Calculate which week of the month this is
+                days_since_month_start = (week_start - month_start).days
+                current_week = (days_since_month_start // 7) + 1
+                attrs["current_week"] = current_week
+
         return attrs
 
 
 class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
-    """Weekly consumption sensor."""
+    """Weekly consumption sensor (updates daily to show cumulative weekly consumption)."""
 
     def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
         """Initialize the weekly consumption sensor."""
@@ -840,10 +903,12 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         self._consumption_week_end: date | None = None
         self._is_current_week: bool = False
         self._data_available_until: date | None = None
+        self._last_weekly_update: date | None = None  # Last day when state was updated
+        self._cumulative_weekly_total: float = 0.0
 
     @property
     def native_value(self) -> float | None:
-        """Return weekly consumption (current week's if available, otherwise most recent available 7-day period)."""
+        """Return cumulative weekly consumption up to current day (updates daily)."""
         if not self._has_data:
             return None
             
@@ -855,6 +920,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_week_end = None
             self._is_current_week = False
             self._data_available_until = None
+            self._cumulative_weekly_total = 0.0
             return None
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
@@ -872,47 +938,64 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_week_end = None
             self._is_current_week = False
             self._data_available_until = None
+            self._cumulative_weekly_total = 0.0
             return None
 
         # Find the most recent date with data
         self._data_available_until = all_dates[0] if all_dates else None
 
-        # Try current week first
-        current_week_total = 0.0
+        # Check if we should update (only if day has changed or first run)
+        should_update = (
+            self._last_weekly_update is None or
+            self._last_weekly_update != today
+        )
+
+        if not should_update:
+            # Return cached cumulative total if day hasn't changed
+            return round(self._cumulative_weekly_total, 3)
+
+        # Calculate cumulative weekly consumption up to current day
+        # Sum all days in current week up to today
+        cumulative_total = 0.0
         has_current_week_data = False
+        
         for check_date in (current_week_start + timedelta(days=i) for i in range(7)):
-            if check_date in daily_totals:
-                current_week_total += daily_totals[check_date]
+            if check_date <= today and check_date in daily_totals:
+                cumulative_total += daily_totals[check_date]
                 has_current_week_data = True
 
-        if has_current_week_data and current_week_total > 0:
+        if has_current_week_data and cumulative_total > 0:
             self._consumption_week_start = current_week_start
             self._consumption_week_end = current_week_end
             self._is_current_week = True
-            return round(current_week_total, 3)
+        else:
+            # Fall back to most recent 7-day period with data
+            most_recent_date = all_dates[0]
+            most_recent_week_end = most_recent_date
+            most_recent_week_start = most_recent_week_end - timedelta(days=6)
 
-        # Fall back to most recent 7-day period with data
-        # Find the most recent date with data and sum 7 days ending on that date
-        most_recent_date = all_dates[0]
-        most_recent_week_end = most_recent_date
-        most_recent_week_start = most_recent_week_end - timedelta(days=6)
+            cumulative_total = 0.0
+            for check_date in (most_recent_week_start + timedelta(days=i) for i in range(7)):
+                if check_date in daily_totals:
+                    cumulative_total += daily_totals[check_date]
 
-        most_recent_week_total = 0.0
-        for check_date in (most_recent_week_start + timedelta(days=i) for i in range(7)):
-            if check_date in daily_totals:
-                most_recent_week_total += daily_totals[check_date]
+            if cumulative_total > 0:
+                self._consumption_week_start = most_recent_week_start
+                self._consumption_week_end = most_recent_week_end
+                self._is_current_week = False
+            else:
+                # No valid week found
+                self._consumption_week_start = None
+                self._consumption_week_end = None
+                self._is_current_week = False
+                self._cumulative_weekly_total = 0.0
+                return None
 
-        if most_recent_week_total > 0:
-            self._consumption_week_start = most_recent_week_start
-            self._consumption_week_end = most_recent_week_end
-            self._is_current_week = False
-            return round(most_recent_week_total, 3)
+        # Update tracking
+        self._last_weekly_update = today
+        self._cumulative_weekly_total = cumulative_total
 
-        # No valid week found
-        self._consumption_week_start = None
-        self._consumption_week_end = None
-        self._is_current_week = False
-        return None
+        return round(cumulative_total, 3)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -929,11 +1012,19 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         if self._data_available_until:
             attrs["data_available_until"] = self._data_available_until.isoformat()
 
+        if self._last_weekly_update:
+            attrs["last_update_day"] = self._last_weekly_update.isoformat()
+            # Calculate current day number in week (1-7, Monday=1)
+            if self._consumption_week_start:
+                days_since_week_start = (self._last_weekly_update - self._consumption_week_start).days
+                current_day = days_since_week_start + 1
+                attrs["current_day"] = current_day
+
         return attrs
 
 
 class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
-    """Yearly consumption sensor."""
+    """Yearly consumption sensor (updates monthly to show cumulative yearly consumption)."""
 
     def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
         """Initialize the yearly consumption sensor."""
@@ -941,10 +1032,13 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
         self._consumption_year: int | None = None
         self._is_current_year: bool = False
         self._data_available_until: int | None = None
+        self._last_yearly_update: tuple[int, int] | None = None  # (year, month)
+        self._monthly_breakdown: dict[str, float] = {}
+        self._cumulative_yearly_total: float = 0.0
 
     @property
     def native_value(self) -> float | None:
-        """Return yearly consumption (current year's if available, otherwise most recent available)."""
+        """Return cumulative yearly consumption up to current month (updates monthly)."""
         if not self._has_data:
             return None
             
@@ -955,38 +1049,94 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_year = None
             self._is_current_year = False
             self._data_available_until = None
+            self._monthly_breakdown = {}
+            self._cumulative_yearly_total = 0.0
             return None
 
-        # Group consumption by year
-        yearly_totals, all_years = _group_consumption_by_year(consumption)
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_year = now.year
+        current_month = now.month
+        current_month_key = (current_year, current_month)
 
-        if not yearly_totals:
+        # Group consumption by month to get monthly breakdown
+        monthly_totals, all_months = _group_consumption_by_month(consumption)
+
+        if not monthly_totals:
             self._consumption_year = None
             self._is_current_year = False
             self._data_available_until = None
+            self._monthly_breakdown = {}
+            self._cumulative_yearly_total = 0.0
             return None
 
-        # Find the most recent year with data
-        self._data_available_until = all_years[0] if all_years else None
-
-        # Try current year first, then fall back to most recent available year
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        current_year = now.year
-        
-        if current_year in yearly_totals:
-            self._consumption_year = current_year
-            self._is_current_year = True
-            return round(yearly_totals[current_year], 3)
+        # Find the most recent month with data
+        if all_months:
+            most_recent_month = all_months[0]
+            self._data_available_until = most_recent_month[0]  # year
         else:
-            # Use the most recent available year
-            most_recent_year = all_years[0]
-            self._consumption_year = most_recent_year
-            self._is_current_year = False
-            return round(yearly_totals[most_recent_year], 3)
+            self._data_available_until = None
+
+        # Calculate cumulative yearly consumption up to current month
+        cumulative_total = 0.0
+        monthly_breakdown: dict[str, float] = {}
+        month_names = [
+            "january", "february", "march", "april", "may", "june",
+            "july", "august", "september", "october", "november", "december"
+        ]
+
+        # Sum all months in current year up to current month
+        for month_num in range(1, current_month + 1):
+            month_key = (current_year, month_num)
+            if month_key in monthly_totals:
+                month_value = monthly_totals[month_key]
+                cumulative_total += month_value
+                monthly_breakdown[month_names[month_num - 1]] = round(month_value, 3)
+
+        # Determine which year to display
+        display_year = current_year
+        display_month_key = current_month_key
+        is_current = True
+
+        # If current year has no data, fall back to most recent available year
+        if cumulative_total == 0.0:
+            most_recent_year = all_months[0][0] if all_months else current_year
+            if most_recent_year != current_year:
+                # For previous years, show full year total (all 12 months)
+                display_year = most_recent_year
+                # Use the last month of that year for tracking
+                most_recent_month = all_months[0][1] if all_months else 12
+                display_month_key = (most_recent_year, most_recent_month)
+                is_current = False
+                
+                for month_num in range(1, 13):
+                    month_key = (most_recent_year, month_num)
+                    if month_key in monthly_totals:
+                        month_value = monthly_totals[month_key]
+                        cumulative_total += month_value
+                        monthly_breakdown[month_names[month_num - 1]] = round(month_value, 3)
+
+        # Check if we should update (only if month has changed or first run)
+        should_update = (
+            self._last_yearly_update is None or
+            self._last_yearly_update != display_month_key
+        )
+
+        if not should_update:
+            # Return cached cumulative total if month hasn't changed
+            return round(self._cumulative_yearly_total, 3)
+
+        # Update tracking
+        self._consumption_year = display_year
+        self._is_current_year = is_current
+        self._last_yearly_update = display_month_key
+        self._monthly_breakdown = monthly_breakdown
+        self._cumulative_yearly_total = cumulative_total
+
+        return round(cumulative_total, 3)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
+        """Return extra state attributes with monthly breakdown."""
         attrs: dict[str, Any] = {}
 
         if self._consumption_year:
@@ -996,6 +1146,19 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._data_available_until:
             attrs["data_available_until"] = f"{self._data_available_until:04d}"
+
+        # Add monthly breakdown
+        if self._last_yearly_update:
+            year, month = self._last_yearly_update
+            attrs["current_month"] = month
+            attrs["last_update_month"] = month
+
+        if self._monthly_breakdown:
+            attrs["monthly_breakdown"] = self._monthly_breakdown
+            attrs["months_with_data"] = list(self._monthly_breakdown.keys())
+            # Add individual month attributes
+            for month_name, value in self._monthly_breakdown.items():
+                attrs[month_name] = value
 
         return attrs
 
