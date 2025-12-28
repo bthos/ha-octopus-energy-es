@@ -434,12 +434,27 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
     def _has_data(self) -> bool:
         """Check if coordinator has data available."""
         # Check if coordinator.data exists and is a dict
-        # Allow using cached data even if last update failed
         if self.coordinator.data is None:
             return False
         if not isinstance(self.coordinator.data, dict):
             return False
-        return True
+        # Allow using data if coordinator has successfully updated at least once
+        # This ensures sensors can access data even if the last update failed
+        if self.coordinator.last_update_success:
+            return True
+        # If last update failed, check if there's actual non-empty data available
+        # (for cases where cached data exists from a previous successful update)
+        data = self.coordinator.data
+        # Check if any of the main data sources have actual data (not empty lists/dicts)
+        has_prices = bool(data.get("today_prices") or data.get("tomorrow_prices"))
+        has_consumption = bool(data.get("consumption"))
+        has_billing = bool(data.get("billing") and isinstance(data.get("billing"), dict) and data.get("billing"))
+        has_credits = bool(data.get("credits") and isinstance(data.get("credits"), dict) and data.get("credits"))
+        has_account = bool(data.get("account") and isinstance(data.get("account"), dict) and data.get("account"))
+        
+        if has_prices or has_consumption or has_billing or has_credits or has_account:
+            return True
+        return False
 
 
 
