@@ -312,7 +312,7 @@ LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Last Invoice",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:invoice-text",
+    icon="mdi:invoice-text-outline",
     suggested_display_precision=2,
 )
 
@@ -351,7 +351,7 @@ NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Next Invoice (Estimated)",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:invoice-text-clock",
+    icon="mdi:invoice-text-clock-outline",
     suggested_display_precision=2,
 )
 
