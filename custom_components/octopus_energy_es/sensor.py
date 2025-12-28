@@ -411,10 +411,6 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
-        # Use the key (which includes octopus_energy_es_ prefix) for entity ID generation
-        # Home Assistant will slugify this to create the entity ID
-        # The display name (friendly_name) will still come from description.name
-        self._attr_name = description.key
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": "Octopus Energy España",
@@ -680,11 +676,11 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             if target_date == today:
                 self._consumption_date = today
                 self._is_today = True
-                return round(daily_totals[today], 3)
+                return daily_totals[today]
             else:
                 self._consumption_date = target_date
                 self._is_today = False
-                return round(daily_totals[target_date], 3)
+                return daily_totals[target_date]
         
         self._consumption_date = None
         self._is_today = False
@@ -780,7 +776,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
 
         if not should_update:
             # Return cached cumulative total if week hasn't changed
-            return round(self._cumulative_monthly_total, 3)
+            return self._cumulative_monthly_total
 
         # Calculate cumulative monthly consumption up to current week
         # Sum all days in current month up to today, grouped by week
@@ -838,14 +834,12 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_month = current_month_key
             self._is_current_month = True
 
-        # Keep weekly breakdown values precise (not rounded)
-
         # Update tracking
         self._last_monthly_update = current_week_start
         self._cumulative_monthly_total = cumulative_total
         self._weekly_breakdown = weekly_breakdown
 
-        return round(cumulative_total, 3)
+        return cumulative_total, 3
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -944,7 +938,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
 
         if not should_update:
             # Return cached cumulative total if day hasn't changed
-            return round(self._cumulative_weekly_total, 3)
+            return self._cumulative_weekly_total
 
         # Calculate cumulative weekly consumption up to current day
         # Sum all days in current week up to today
@@ -996,7 +990,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         self._cumulative_weekly_total = cumulative_total
         self._daily_breakdown = daily_breakdown
 
-        return round(cumulative_total, 3)
+        return cumulative_total
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1129,7 +1123,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 
         if not should_update:
             # Return cached cumulative total if month hasn't changed
-            return round(self._cumulative_yearly_total, 3)
+            return self._cumulative_yearly_total
 
         # Update tracking
         self._consumption_year = display_year
@@ -1138,7 +1132,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
         self._monthly_breakdown = monthly_breakdown
         self._cumulative_yearly_total = cumulative_total
 
-        return round(cumulative_total, 3)
+        return cumulative_total
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1314,11 +1308,11 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
         
         # Add cost breakdown if available
         if self._cost_breakdown:
-            attrs["base_cost"] = round(self._cost_breakdown.get("base", 0), 2)
-            attrs["other_concepts_cost"] = round(self._cost_breakdown.get("other_concepts", 0), 2)
-            attrs["electricity_tax"] = round(self._cost_breakdown.get("electricity_tax", 0), 2)
-            attrs["vat"] = round(self._cost_breakdown.get("vat", 0), 2)
-            attrs["total_cost"] = round(self._cost_breakdown.get("total", 0), 2)
+            attrs["base_cost"] = self._cost_breakdown.get("base", 0)
+            attrs["other_concepts_cost"] = self._cost_breakdown.get("other_concepts", 0)
+            attrs["electricity_tax"] = self._cost_breakdown.get("electricity_tax", 0)
+            attrs["vat"] = self._cost_breakdown.get("vat", 0)
+            attrs["total_cost"] = self._cost_breakdown.get("total", 0)
         
         return attrs
 
@@ -1640,15 +1634,15 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
 
         # Store breakdown
         self._estimated_breakdown = {
-            "actual_energy_cost": round(actual_energy_cost, 2),
-            "projected_energy_cost": round(projected_energy_cost, 2),
-            "power_cost": round(power_cost_total, 2),
-            "management_fee": round(management_fee, 2),
-            "other_concepts": round(other_concepts, 2),
-            "base_total": round(base_total, 2),
-            "electricity_tax": round(electricity_tax, 2),
-            "vat": round(vat, 2),
-            "total": round(total, 2),
+            "actual_energy_cost": actual_energy_cost,
+            "projected_energy_cost": projected_energy_cost,
+            "power_cost": power_cost_total,
+            "management_fee": management_fee,
+            "other_concepts": other_concepts,
+            "base_total": base_total,
+            "electricity_tax": electricity_tax,
+            "vat": vat,
+            "total": total,
         }
 
         return total
@@ -1785,7 +1779,7 @@ class OctopusEnergyESCreditsSensor(OctopusEnergyESSensor):
                             except (ValueError, TypeError):
                                 pass
                     if month_total > 0:
-                        current_month_by_reason[reason_code] = round(month_total, 2)
+                        current_month_by_reason[reason_code] = month_total
                 
                 if current_month_by_reason:
                     attrs["credits_by_reason_code"] = current_month_by_reason
@@ -1907,7 +1901,7 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
                                     credit = consumption_value * base_price_per_kwh * discount_percentage
                                     total_estimated_credits += credit
 
-        return round(total_estimated_credits, 2) if total_estimated_credits > 0 else 0.0
+        return total_estimated_credits if total_estimated_credits > 0 else 0.0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1943,7 +1937,7 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
                             except (ValueError, AttributeError):
                                 pass
                     if month_total > 0:
-                        current_month_by_reason[reason_code] = round(month_total, 2)
+                        current_month_by_reason[reason_code] = month_total
                 
                 if current_month_by_reason:
                     attrs["credits_by_reason_code"] = current_month_by_reason
