@@ -258,15 +258,6 @@ DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=3,
 )
 
-HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
-    key="octopus_energy_es_hourly_consumption",
-    name="Hourly Consumption",
-    native_unit_of_measurement="kWh",
-    device_class=SensorDeviceClass.ENERGY,
-    state_class=SensorStateClass.TOTAL,
-    icon="mdi:lightning-bolt",
-    suggested_display_precision=3,
-)
 
 MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_monthly_consumption",
@@ -381,9 +372,6 @@ async def async_setup_entry(
         OctopusEnergyESCheapestHourSensor(coordinator, CHEAPEST_HOUR_SENSOR_DESCRIPTION),
         OctopusEnergyESDailyConsumptionSensor(
             coordinator, DAILY_CONSUMPTION_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESHourlyConsumptionSensor(
-            coordinator, HOURLY_CONSUMPTION_SENSOR_DESCRIPTION
         ),
         OctopusEnergyESMonthlyConsumptionSensor(
             coordinator, MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION
@@ -631,6 +619,7 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
         self._consumption_date: date | None = None
         self._is_today: bool = False
         self._data_available_until: date | None = None
+        self._hourly_breakdown: dict[str, float] = {}
 
     @property
     def native_value(self) -> float | None:
@@ -645,15 +634,18 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_date = None
             self._is_today = False
             self._data_available_until = None
+            self._hourly_breakdown = {}
             return None
 
-        # Group consumption by date
+        # Group consumption by date and by hour
         daily_totals, all_dates = _group_consumption_by_date(consumption)
+        hourly_totals, all_hours = _group_consumption_by_hour(consumption)
 
         if not daily_totals:
             self._consumption_date = None
             self._is_today = False
             self._data_available_until = None
+            self._hourly_breakdown = {}
             return None
 
         # Find the most recent date with data
@@ -663,16 +655,37 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
         today = now.date()
         
-        if today in daily_totals:
-            self._consumption_date = today
-            self._is_today = True
-            return round(daily_totals[today], 3)
-        else:
-            # Use the most recent available date
-            most_recent_date = all_dates[0]
-            self._consumption_date = most_recent_date
-            self._is_today = False
-            return round(daily_totals[most_recent_date], 3)
+        target_date = today if today in daily_totals else (all_dates[0] if all_dates else None)
+        
+        if target_date:
+            # Calculate hourly breakdown for the target date
+            hourly_breakdown: dict[str, float] = {}
+            target_date_start = datetime.combine(target_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            
+            for hour_num in range(24):
+                hour_dt = target_date_start + timedelta(hours=hour_num)
+                hour_key = f"hour_{hour_num:02d}"
+                
+                if hour_dt in hourly_totals:
+                    hourly_breakdown[hour_key] = round(hourly_totals[hour_dt], 3)
+                else:
+                    hourly_breakdown[hour_key] = 0.0
+            
+            self._hourly_breakdown = hourly_breakdown
+            
+            if target_date == today:
+                self._consumption_date = today
+                self._is_today = True
+                return round(daily_totals[today], 3)
+            else:
+                self._consumption_date = target_date
+                self._is_today = False
+                return round(daily_totals[target_date], 3)
+        
+        self._consumption_date = None
+        self._is_today = False
+        self._hourly_breakdown = {}
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -687,74 +700,11 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
         if self._data_available_until:
             attrs["data_available_until"] = self._data_available_until.isoformat()
         
-        return attrs
-
-
-class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
-    """Hourly consumption sensor."""
-
-    def __init__(self, coordinator: OctopusEnergyESCoordinator, description: SensorEntityDescription) -> None:
-        """Initialize the hourly consumption sensor."""
-        super().__init__(coordinator, description)
-        self._consumption_datetime: datetime | None = None
-        self._is_current_hour: bool = False
-        self._data_available_until: datetime | None = None
-
-    @property
-    def native_value(self) -> float | None:
-        """Return hourly consumption (current hour's if available, otherwise most recent available)."""
-        if not self._has_data:
-            return None
-            
-        data = self.coordinator.data
-        consumption = data.get("consumption", [])
-
-        if not consumption:
-            self._consumption_datetime = None
-            self._is_current_hour = False
-            self._data_available_until = None
-            return None
-
-        # Group consumption by hour
-        hourly_totals, all_hours = _group_consumption_by_hour(consumption)
-
-        if not hourly_totals:
-            self._consumption_datetime = None
-            self._is_current_hour = False
-            self._data_available_until = None
-            return None
-
-        # Find the most recent hour with data
-        self._data_available_until = all_hours[0] if all_hours else None
-
-        # Try current hour first, then fall back to most recent available hour
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        # Add individual hour attributes
+        if self._hourly_breakdown:
+            for hour_key, value in self._hourly_breakdown.items():
+                attrs[hour_key] = value
         
-        if current_hour in hourly_totals:
-            self._consumption_datetime = current_hour
-            self._is_current_hour = True
-            return round(hourly_totals[current_hour], 3)
-        else:
-            # Use the most recent available hour
-            most_recent_hour = all_hours[0]
-            self._consumption_datetime = most_recent_hour
-            self._is_current_hour = False
-            return round(hourly_totals[most_recent_hour], 3)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs: dict[str, Any] = {}
-
-        if self._consumption_datetime:
-            attrs["consumption_datetime"] = self._consumption_datetime.isoformat()
-            attrs["last_reset"] = _calculate_last_reset_for_datetime(self._consumption_datetime)
-        attrs["is_current_hour"] = self._is_current_hour
-
-        if self._data_available_until:
-            attrs["data_available_until"] = self._data_available_until.isoformat()
-
         return attrs
 
 
@@ -769,6 +719,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         self._data_available_until: tuple[int, int] | None = None  # (year, month)
         self._last_monthly_update: date | None = None  # Last week start date when state was updated
         self._cumulative_monthly_total: float = 0.0
+        self._weekly_breakdown: dict[str, float] = {}
 
     def _get_week_start(self, target_date: date) -> date:
         """Get the start date of the week containing target_date (Monday = 0)."""
@@ -790,6 +741,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._is_current_month = False
             self._data_available_until = None
             self._cumulative_monthly_total = 0.0
+            self._weekly_breakdown = {}
             return None
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
@@ -809,6 +761,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._is_current_month = False
             self._data_available_until = None
             self._cumulative_monthly_total = 0.0
+            self._weekly_breakdown = {}
             return None
 
         # Find the most recent month with data
@@ -826,13 +779,26 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             return round(self._cumulative_monthly_total, 3)
 
         # Calculate cumulative monthly consumption up to current week
-        # Sum all days in current month up to today
+        # Sum all days in current month up to today, grouped by week
         cumulative_total = 0.0
+        weekly_breakdown: dict[str, float] = {}
         month_start = date(current_year, current_month, 1)
         
+        # Calculate weekly totals for current month
         for check_date in (month_start + timedelta(days=i) for i in range((today - month_start).days + 1)):
             if check_date <= today and check_date in daily_totals:
-                cumulative_total += daily_totals[check_date]
+                day_value = daily_totals[check_date]
+                cumulative_total += day_value
+                
+                # Determine which week of the month this day belongs to (1-5)
+                week_start = self._get_week_start(check_date)
+                days_since_month_start = (week_start - month_start).days
+                week_num = (days_since_month_start // 7) + 1
+                week_key = f"week_{week_num}"
+                
+                if week_key not in weekly_breakdown:
+                    weekly_breakdown[week_key] = 0.0
+                weekly_breakdown[week_key] += day_value
 
         # If current month has no data, fall back to most recent available month
         if cumulative_total == 0.0 and all_months:
@@ -846,10 +812,21 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             else:
                 month_end = date(most_recent_year, most_recent_month_num + 1, 1) - timedelta(days=1)
             
-            # Sum all days in that month
+            # Sum all days in that month, grouped by week
             for check_date in (month_start + timedelta(days=i) for i in range((month_end - month_start).days + 1)):
                 if check_date in daily_totals:
-                    cumulative_total += daily_totals[check_date]
+                    day_value = daily_totals[check_date]
+                    cumulative_total += day_value
+                    
+                    # Determine which week of the month this day belongs to
+                    week_start = self._get_week_start(check_date)
+                    days_since_month_start = (week_start - month_start).days
+                    week_num = (days_since_month_start // 7) + 1
+                    week_key = f"week_{week_num}"
+                    
+                    if week_key not in weekly_breakdown:
+                        weekly_breakdown[week_key] = 0.0
+                    weekly_breakdown[week_key] += day_value
             
             self._consumption_month = most_recent_month
             self._is_current_month = False
@@ -857,9 +834,13 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_month = current_month_key
             self._is_current_month = True
 
+        # Round weekly breakdown values
+        weekly_breakdown = {k: round(v, 3) for k, v in weekly_breakdown.items()}
+
         # Update tracking
         self._last_monthly_update = current_week_start
         self._cumulative_monthly_total = cumulative_total
+        self._weekly_breakdown = weekly_breakdown
 
         return round(cumulative_total, 3)
 
@@ -890,6 +871,11 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
                 current_week = (days_since_month_start // 7) + 1
                 attrs["current_week"] = current_week
 
+        # Add individual week attributes
+        if self._weekly_breakdown:
+            for week_key, value in self._weekly_breakdown.items():
+                attrs[week_key] = value
+
         return attrs
 
 
@@ -905,6 +891,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         self._data_available_until: date | None = None
         self._last_weekly_update: date | None = None  # Last day when state was updated
         self._cumulative_weekly_total: float = 0.0
+        self._daily_breakdown: dict[str, float] = {}
 
     @property
     def native_value(self) -> float | None:
@@ -921,6 +908,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             self._is_current_week = False
             self._data_available_until = None
             self._cumulative_weekly_total = 0.0
+            self._daily_breakdown = {}
             return None
 
         now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
@@ -939,6 +927,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             self._is_current_week = False
             self._data_available_until = None
             self._cumulative_weekly_total = 0.0
+            self._daily_breakdown = {}
             return None
 
         # Find the most recent date with data
@@ -958,10 +947,14 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         # Sum all days in current week up to today
         cumulative_total = 0.0
         has_current_week_data = False
+        daily_breakdown: dict[str, float] = {}
+        day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
         
-        for check_date in (current_week_start + timedelta(days=i) for i in range(7)):
+        for i, check_date in enumerate((current_week_start + timedelta(days=j) for j in range(7))):
             if check_date <= today and check_date in daily_totals:
-                cumulative_total += daily_totals[check_date]
+                day_value = daily_totals[check_date]
+                cumulative_total += day_value
+                daily_breakdown[day_names[i]] = round(day_value, 3)
                 has_current_week_data = True
 
         if has_current_week_data and cumulative_total > 0:
@@ -975,9 +968,12 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             most_recent_week_start = most_recent_week_end - timedelta(days=6)
 
             cumulative_total = 0.0
-            for check_date in (most_recent_week_start + timedelta(days=i) for i in range(7)):
+            daily_breakdown = {}
+            for i, check_date in enumerate((most_recent_week_start + timedelta(days=j) for j in range(7))):
                 if check_date in daily_totals:
-                    cumulative_total += daily_totals[check_date]
+                    day_value = daily_totals[check_date]
+                    cumulative_total += day_value
+                    daily_breakdown[day_names[i]] = round(day_value, 3)
 
             if cumulative_total > 0:
                 self._consumption_week_start = most_recent_week_start
@@ -989,11 +985,13 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
                 self._consumption_week_end = None
                 self._is_current_week = False
                 self._cumulative_weekly_total = 0.0
+                self._daily_breakdown = {}
                 return None
 
         # Update tracking
         self._last_weekly_update = today
         self._cumulative_weekly_total = cumulative_total
+        self._daily_breakdown = daily_breakdown
 
         return round(cumulative_total, 3)
 
@@ -1019,6 +1017,11 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
                 days_since_week_start = (self._last_weekly_update - self._consumption_week_start).days
                 current_day = days_since_week_start + 1
                 attrs["current_day"] = current_day
+
+        # Add individual day attributes
+        if self._daily_breakdown:
+            for day_name, value in self._daily_breakdown.items():
+                attrs[day_name] = value
 
         return attrs
 
@@ -1154,8 +1157,6 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             attrs["last_update_month"] = month
 
         if self._monthly_breakdown:
-            attrs["monthly_breakdown"] = self._monthly_breakdown
-            attrs["months_with_data"] = list(self._monthly_breakdown.keys())
             # Add individual month attributes
             for month_name, value in self._monthly_breakdown.items():
                 attrs[month_name] = value

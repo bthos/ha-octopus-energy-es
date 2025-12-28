@@ -52,7 +52,6 @@ TIME_STRUCTURE_TIME_OF_USE = "time_of_use"
 # Update intervals
 UPDATE_INTERVAL_TODAY = timedelta(hours=1)
 UPDATE_INTERVAL_TOMORROW = timedelta(hours=24)
-UPDATE_INTERVAL_CONSUMPTION = timedelta(minutes=15)
 UPDATE_INTERVAL_BILLING = timedelta(hours=24)
 
 # Spanish market publishes tomorrow's prices at 14:00 CET

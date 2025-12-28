@@ -22,7 +22,6 @@ from .const import (
     PRICING_MODEL_MARKET,
     TIMEZONE_MADRID,
     UPDATE_INTERVAL_BILLING,
-    UPDATE_INTERVAL_CONSUMPTION,
     UPDATE_INTERVAL_TODAY,
     UPDATE_INTERVAL_TOMORROW,
 )
@@ -78,6 +77,10 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
+        self._last_consumption_update: date | None = None
+        self._last_billing_update: date | None = None
+        self._last_credits_update: date | None = None
+        self._last_account_update: date | None = None
         self._first_update_attempted: bool = False
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -142,14 +145,20 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning("Error updating tomorrow's prices: %s", err)
                 # Don't fail if tomorrow's prices aren't available yet
 
-        # Update consumption data (every 15 minutes)
+        # Update consumption data (daily)
         # Note: Octopus Energy España API may not be publicly available
-        if self._octopus_client:
+        should_update_consumption = (
+            self._last_consumption_update is None
+            or self._last_consumption_update < now.date()
+        )
+        
+        if should_update_consumption and self._octopus_client:
             try:
                 consumption_result = await self._octopus_client.fetch_consumption(
                     granularity="hourly"
                 )
                 self._consumption_data = consumption_result or []
+                self._last_consumption_update = now.date()
                 if consumption_result:
                     _LOGGER.debug(
                         "Fetched %d consumption measurements",
@@ -183,9 +192,15 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 )
 
         # Update billing data (daily)
-        if self._octopus_client:
+        should_update_billing = (
+            self._last_billing_update is None
+            or self._last_billing_update < now.date()
+        )
+        
+        if should_update_billing and self._octopus_client:
             try:
                 self._billing_data = await self._octopus_client.fetch_billing()
+                self._last_billing_update = now.date()
             except OctopusClientError as err:
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:
@@ -199,9 +214,15 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 # Billing is optional, don't fail
 
         # Update credits data (daily)
-        if self._octopus_client:
+        should_update_credits = (
+            self._last_credits_update is None
+            or self._last_credits_update < now.date()
+        )
+        
+        if should_update_credits and self._octopus_client:
             try:
                 self._credits_data = await self._octopus_client.fetch_account_credits()
+                self._last_credits_update = now.date()
             except OctopusClientError as err:
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:
@@ -215,7 +236,12 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 # Credits are optional, don't fail
 
         # Update account data (daily)
-        if self._octopus_client:
+        should_update_account = (
+            self._last_account_update is None
+            or self._last_account_update < now.date()
+        )
+        
+        if should_update_account and self._octopus_client:
             try:
                 account_info = await self._octopus_client.fetch_account_info()
                 if account_info:
@@ -230,6 +256,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                             tariff_display += f" - {time_structure.replace('_', ' ').title()}"
                         account_info["tariff"] = tariff_display
                     self._account_data = account_info
+                    self._last_account_update = now.date()
             except OctopusClientError as err:
                 error_msg = str(err).lower()
                 if "not available" in error_msg or "not be publicly" in error_msg:

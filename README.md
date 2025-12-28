@@ -44,9 +44,9 @@ Supports all Octopus Energy España tariff types:
 - Separate `today` and `tomorrow` price arrays
 
 ### 📈 Consumption Tracking
-- Daily, hourly, weekly, monthly, and yearly consumption sensors
+- Daily, weekly, monthly, and yearly consumption sensors
 - Daily cost calculation
-- Real-time consumption monitoring
+- Hourly breakdown attributes on daily consumption sensor (`hour_00` through `hour_23`)
 - Shows latest available data when current period data isn't yet processed
 
 ### 🧾 Billing Integration
@@ -178,10 +178,13 @@ If you selected Market pricing, select the PVPC Hourly Pricing sensor:
 ### 📈 Consumption Sensors
 
 - `sensor.octopus_energy_es_daily_consumption`: Daily consumption in kWh (shows latest available if today's data isn't processed yet)
-- `sensor.octopus_energy_es_hourly_consumption`: Hourly consumption in kWh (shows latest available if current hour's data isn't processed yet)
-- `sensor.octopus_energy_es_weekly_consumption`: Weekly consumption in kWh
-- `sensor.octopus_energy_es_monthly_consumption`: Monthly consumption in kWh
-- `sensor.octopus_energy_es_yearly_consumption`: Yearly consumption in kWh
+  - **Attributes**: `hour_00` through `hour_23` (hourly breakdown for the selected day)
+- `sensor.octopus_energy_es_weekly_consumption`: Weekly consumption in kWh (updates daily)
+  - **Attributes**: `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday` (daily breakdown)
+- `sensor.octopus_energy_es_monthly_consumption`: Monthly consumption in kWh (updates weekly)
+  - **Attributes**: `week_1`, `week_2`, `week_3`, `week_4`, `week_5` (weekly breakdown)
+- `sensor.octopus_energy_es_yearly_consumption`: Yearly consumption in kWh (updates monthly)
+  - **Attributes**: `january`, `february`, `march`, etc. (monthly breakdown)
 - `sensor.octopus_energy_es_daily_cost`: Daily cost in € (calculated from consumption and prices)
 
 ### 🧾 Billing Sensors
@@ -222,8 +225,10 @@ The sensor provides data in the required format:
 
 - **📅 Today's Prices**: Updated every hour
 - **📅 Tomorrow's Prices**: Updated daily at 14:00 CET (when Spanish market publishes)
-- **📈 Consumption Data**: Updated every 15 minutes (if available)
+- **📈 Consumption Data**: Updated daily (Octopus Energy provides data for past dates only)
 - **🧾 Billing Data**: Updated daily
+- **💰 Credits Data**: Updated daily
+- **👤 Account Data**: Updated daily
 
 ## 🔧 Troubleshooting
 
