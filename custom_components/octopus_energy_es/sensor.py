@@ -28,6 +28,8 @@ from .const import (
     CONF_MANAGEMENT_FEE_MONTHLY,
     CONF_OTHER_CONCEPTS_RATE,
     DOMAIN,
+    PRICING_MODEL_FIXED,
+    PRICING_MODEL_MARKET,
     TIMEZONE_MADRID,
 )
 from .coordinator import OctopusEnergyESCoordinator
@@ -56,6 +58,153 @@ def _parse_datetime_to_madrid(dt_str: str) -> datetime | None:
     except (ValueError, TypeError) as err:
         _LOGGER.debug("Error parsing datetime '%s': %s", dt_str, err)
         return None
+
+
+def _group_consumption_by_date(
+    consumption: list[dict[str, Any]]
+) -> tuple[dict[date, float], list[date]]:
+    """
+    Group consumption data by date and calculate daily totals.
+    
+    Args:
+        consumption: List of consumption items with 'start_time' or 'date' and 'consumption' or 'value'
+        
+    Returns:
+        Tuple of (daily_totals dict, sorted list of dates)
+    """
+    daily_totals: dict[date, float] = {}
+    all_dates: list[date] = []
+    
+    for item in consumption:
+        if isinstance(item, dict):
+            item_time_str = item.get("start_time") or item.get("date")
+            if item_time_str:
+                item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                if item_dt_madrid:
+                    item_date = item_dt_madrid.date()
+                    if item_date not in daily_totals:
+                        daily_totals[item_date] = 0.0
+                        all_dates.append(item_date)
+                    daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
+    
+    all_dates.sort(reverse=True)
+    return daily_totals, all_dates
+
+
+def _group_consumption_by_hour(
+    consumption: list[dict[str, Any]]
+) -> tuple[dict[datetime, float], list[datetime]]:
+    """
+    Group consumption data by hour and calculate hourly totals.
+    
+    Args:
+        consumption: List of consumption items with 'start_time' or 'datetime' and 'consumption' or 'value'
+        
+    Returns:
+        Tuple of (hourly_totals dict, sorted list of hours)
+    """
+    hourly_totals: dict[datetime, float] = {}
+    all_hours: list[datetime] = []
+    
+    for item in consumption:
+        if isinstance(item, dict):
+            item_time_str = item.get("start_time") or item.get("datetime")
+            if item_time_str:
+                item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                if item_dt_madrid:
+                    item_hour = item_dt_madrid.replace(minute=0, second=0, microsecond=0)
+                    if item_hour not in hourly_totals:
+                        hourly_totals[item_hour] = 0.0
+                        all_hours.append(item_hour)
+                    hourly_totals[item_hour] += float(item.get("consumption", item.get("value", 0)))
+    
+    all_hours.sort(reverse=True)
+    return hourly_totals, all_hours
+
+
+def _group_consumption_by_month(
+    consumption: list[dict[str, Any]]
+) -> tuple[dict[tuple[int, int], float], list[tuple[int, int]]]:
+    """
+    Group consumption data by month and calculate monthly totals.
+    
+    Args:
+        consumption: List of consumption items with 'start_time' or 'date' and 'consumption' or 'value'
+        
+    Returns:
+        Tuple of (monthly_totals dict keyed by (year, month), sorted list of month keys)
+    """
+    monthly_totals: dict[tuple[int, int], float] = {}
+    all_months: list[tuple[int, int]] = []
+    
+    for item in consumption:
+        if isinstance(item, dict):
+            item_time_str = item.get("start_time") or item.get("date")
+            if item_time_str:
+                item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                if item_dt_madrid:
+                    month_key = (item_dt_madrid.year, item_dt_madrid.month)
+                    if month_key not in monthly_totals:
+                        monthly_totals[month_key] = 0.0
+                        all_months.append(month_key)
+                    monthly_totals[month_key] += float(item.get("consumption", item.get("value", 0)))
+    
+    all_months.sort(reverse=True)
+    return monthly_totals, all_months
+
+
+def _group_consumption_by_year(
+    consumption: list[dict[str, Any]]
+) -> tuple[dict[int, float], list[int]]:
+    """
+    Group consumption data by year and calculate yearly totals.
+    
+    Args:
+        consumption: List of consumption items with 'start_time' or 'date' and 'consumption' or 'value'
+        
+    Returns:
+        Tuple of (yearly_totals dict, sorted list of years)
+    """
+    yearly_totals: dict[int, float] = {}
+    all_years: list[int] = []
+    
+    for item in consumption:
+        if isinstance(item, dict):
+            item_time_str = item.get("start_time") or item.get("date")
+            if item_time_str:
+                item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
+                if item_dt_madrid:
+                    year = item_dt_madrid.year
+                    if year not in yearly_totals:
+                        yearly_totals[year] = 0.0
+                        all_years.append(year)
+                    yearly_totals[year] += float(item.get("consumption", item.get("value", 0)))
+    
+    all_years.sort(reverse=True)
+    return yearly_totals, all_years
+
+
+def _calculate_last_reset_for_date(target_date: date) -> str:
+    """Calculate last_reset datetime for a given date (start of day at midnight)."""
+    day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+    return day_start.isoformat()
+
+
+def _calculate_last_reset_for_datetime(target_datetime: datetime) -> str:
+    """Calculate last_reset datetime for a given datetime (the datetime itself)."""
+    return target_datetime.isoformat()
+
+
+def _calculate_last_reset_for_month(year: int, month: int) -> str:
+    """Calculate last_reset datetime for a given month (start of month, 1st day at midnight)."""
+    month_start = datetime(year, month, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
+    return month_start.isoformat()
+
+
+def _calculate_last_reset_for_year(year: int) -> str:
+    """Calculate last_reset datetime for a given year (January 1st at midnight)."""
+    year_start = datetime(year, 1, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
+    return year_start.isoformat()
 
 PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_average_price",
@@ -461,24 +610,8 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             self._data_available_until = None
             return None
 
-        # Group consumption by date and calculate daily totals
-        daily_totals: dict[date, float] = {}
-        all_dates: list[date] = []
-        
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        today = now.date()
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("date")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        item_date = item_dt_madrid.date()
-                        if item_date not in daily_totals:
-                            daily_totals[item_date] = 0.0
-                            all_dates.append(item_date)
-                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by date
+        daily_totals, all_dates = _group_consumption_by_date(consumption)
 
         if not daily_totals:
             self._consumption_date = None
@@ -487,10 +620,12 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent date with data
-        all_dates.sort(reverse=True)
-        self._data_available_until = all_dates[0]
+        self._data_available_until = all_dates[0] if all_dates else None
 
         # Try today first, then fall back to most recent available date
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
+        
         if today in daily_totals:
             self._consumption_date = today
             self._is_today = True
@@ -509,9 +644,7 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
         
         if self._consumption_date:
             attrs["consumption_date"] = self._consumption_date.isoformat()
-            # Set last_reset to the start of the day (midnight) for Energy Dashboard compatibility
-            day_start = datetime.combine(self._consumption_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
-            attrs["last_reset"] = day_start.isoformat()
+            attrs["last_reset"] = _calculate_last_reset_for_date(self._consumption_date)
         attrs["is_today"] = self._is_today
         
         if self._data_available_until:
@@ -545,24 +678,8 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
             self._data_available_until = None
             return None
 
-        # Group consumption by hour and calculate hourly totals
-        hourly_totals: dict[datetime, float] = {}
-        all_hours: list[datetime] = []
-
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("datetime")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        item_hour = item_dt_madrid.replace(minute=0, second=0, microsecond=0)
-                        if item_hour not in hourly_totals:
-                            hourly_totals[item_hour] = 0.0
-                            all_hours.append(item_hour)
-                        hourly_totals[item_hour] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by hour
+        hourly_totals, all_hours = _group_consumption_by_hour(consumption)
 
         if not hourly_totals:
             self._consumption_datetime = None
@@ -571,10 +688,12 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent hour with data
-        all_hours.sort(reverse=True)
-        self._data_available_until = all_hours[0]
+        self._data_available_until = all_hours[0] if all_hours else None
 
         # Try current hour first, then fall back to most recent available hour
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        
         if current_hour in hourly_totals:
             self._consumption_datetime = current_hour
             self._is_current_hour = True
@@ -593,8 +712,7 @@ class OctopusEnergyESHourlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_datetime:
             attrs["consumption_datetime"] = self._consumption_datetime.isoformat()
-            # Set last_reset to the start of the hour period for Energy Dashboard compatibility
-            attrs["last_reset"] = self._consumption_datetime.isoformat()
+            attrs["last_reset"] = _calculate_last_reset_for_datetime(self._consumption_datetime)
         attrs["is_current_hour"] = self._is_current_hour
 
         if self._data_available_until:
@@ -628,25 +746,8 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._data_available_until = None
             return None
 
-        # Group consumption by month and calculate monthly totals
-        monthly_totals: dict[tuple[int, int], float] = {}
-        all_months: list[tuple[int, int]] = []
-
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        current_month = now.month
-        current_year = now.year
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("date")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        month_key = (item_dt_madrid.year, item_dt_madrid.month)
-                        if month_key not in monthly_totals:
-                            monthly_totals[month_key] = 0.0
-                            all_months.append(month_key)
-                        monthly_totals[month_key] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by month
+        monthly_totals, all_months = _group_consumption_by_month(consumption)
 
         if not monthly_totals:
             self._consumption_month = None
@@ -655,11 +756,14 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent month with data
-        all_months.sort(reverse=True)
-        self._data_available_until = all_months[0]
+        self._data_available_until = all_months[0] if all_months else None
 
         # Try current month first, then fall back to most recent available month
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_month = now.month
+        current_year = now.year
         current_month_key = (current_year, current_month)
+        
         if current_month_key in monthly_totals:
             self._consumption_month = current_month_key
             self._is_current_month = True
@@ -679,9 +783,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         if self._consumption_month:
             year, month = self._consumption_month
             attrs["consumption_month"] = f"{year:04d}-{month:02d}"
-            # Set last_reset to the start of the month (first day at midnight) for Energy Dashboard compatibility
-            month_start = datetime(year, month, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
-            attrs["last_reset"] = month_start.isoformat()
+            attrs["last_reset"] = _calculate_last_reset_for_month(year, month)
         attrs["is_current_month"] = self._is_current_month
 
         if self._data_available_until:
@@ -725,21 +827,8 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
         current_week_end = today
         current_week_start = current_week_end - timedelta(days=6)
 
-        # Group consumption by date and calculate daily totals
-        daily_totals: dict[date, float] = {}
-        all_dates: list[date] = []
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("date")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        item_date = item_dt_madrid.date()
-                        if item_date not in daily_totals:
-                            daily_totals[item_date] = 0.0
-                            all_dates.append(item_date)
-                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by date
+        daily_totals, all_dates = _group_consumption_by_date(consumption)
 
         if not daily_totals:
             self._consumption_week_start = None
@@ -749,8 +838,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent date with data
-        all_dates.sort(reverse=True)
-        self._data_available_until = all_dates[0]
+        self._data_available_until = all_dates[0] if all_dates else None
 
         # Try current week first
         current_week_total = 0.0
@@ -796,9 +884,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_week_start:
             attrs["consumption_week_start"] = self._consumption_week_start.isoformat()
-            # Set last_reset to the start of the week (midnight of week start date) for Energy Dashboard compatibility
-            week_start_dt = datetime.combine(self._consumption_week_start, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
-            attrs["last_reset"] = week_start_dt.isoformat()
+            attrs["last_reset"] = _calculate_last_reset_for_date(self._consumption_week_start)
         if self._consumption_week_end:
             attrs["consumption_week_end"] = self._consumption_week_end.isoformat()
         attrs["is_current_week"] = self._is_current_week
@@ -834,24 +920,8 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             self._data_available_until = None
             return None
 
-        # Group consumption by year and calculate yearly totals
-        yearly_totals: dict[int, float] = {}
-        all_years: list[int] = []
-
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        current_year = now.year
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("date")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        year = item_dt_madrid.year
-                        if year not in yearly_totals:
-                            yearly_totals[year] = 0.0
-                            all_years.append(year)
-                        yearly_totals[year] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by year
+        yearly_totals, all_years = _group_consumption_by_year(consumption)
 
         if not yearly_totals:
             self._consumption_year = None
@@ -860,10 +930,12 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent year with data
-        all_years.sort(reverse=True)
-        self._data_available_until = all_years[0]
+        self._data_available_until = all_years[0] if all_years else None
 
         # Try current year first, then fall back to most recent available year
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        current_year = now.year
+        
         if current_year in yearly_totals:
             self._consumption_year = current_year
             self._is_current_year = True
@@ -882,9 +954,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
 
         if self._consumption_year:
             attrs["consumption_year"] = f"{self._consumption_year:04d}"
-            # Set last_reset to the start of the year (January 1st at midnight) for Energy Dashboard compatibility
-            year_start = datetime(self._consumption_year, 1, 1, tzinfo=ZoneInfo(TIMEZONE_MADRID))
-            attrs["last_reset"] = year_start.isoformat()
+            attrs["last_reset"] = _calculate_last_reset_for_year(self._consumption_year)
         attrs["is_current_year"] = self._is_current_year
 
         if self._data_available_until:
@@ -920,24 +990,8 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
             self._data_available_until = None
             return None
 
-        # Group consumption by date and calculate daily totals
-        daily_totals: dict[date, float] = {}
-        all_dates: list[date] = []
-        
-        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
-        today = now.date()
-
-        for item in consumption:
-            if isinstance(item, dict):
-                item_time_str = item.get("start_time") or item.get("date")
-                if item_time_str:
-                    item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
-                    if item_dt_madrid:
-                        item_date = item_dt_madrid.date()
-                        if item_date not in daily_totals:
-                            daily_totals[item_date] = 0.0
-                            all_dates.append(item_date)
-                        daily_totals[item_date] += float(item.get("consumption", item.get("value", 0)))
+        # Group consumption by date
+        daily_totals, all_dates = _group_consumption_by_date(consumption)
 
         if not daily_totals:
             self._cost_date = None
@@ -946,10 +1000,11 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
             return None
 
         # Find the most recent date with data
-        all_dates.sort(reverse=True)
-        self._data_available_until = all_dates[0]
+        self._data_available_until = all_dates[0] if all_dates else None
 
         # Try today first, then fall back to most recent available date
+        now = datetime.now(ZoneInfo(TIMEZONE_MADRID))
+        today = now.date()
         target_date = today if today in daily_totals else all_dates[0]
         self._cost_date = target_date
         self._is_today = (target_date == today)
@@ -1110,9 +1165,11 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
     def _calculate_daily_energy_cost(
         self, target_date: date, consumption: list[dict[str, Any]], prices: list[dict[str, Any]]
     ) -> float:
-        """Calculate energy cost for a specific day using DailyCostSensor logic."""
+        """Calculate energy cost for a specific day using tariff calculator."""
         # Group consumption by hour for the target date
         hourly_consumption: dict[int, float] = {}
+        daily_consumption = 0.0
+        
         for item in consumption:
             if isinstance(item, dict):
                 item_time_str = item.get("start_time") or item.get("date")
@@ -1120,41 +1177,80 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
                     item_dt_madrid = _parse_datetime_to_madrid(item_time_str)
                     if item_dt_madrid and item_dt_madrid.date() == target_date:
                         hour = item_dt_madrid.hour
+                        consumption_value = float(item.get("consumption", item.get("value", 0)))
                         if hour not in hourly_consumption:
                             hourly_consumption[hour] = 0.0
-                        hourly_consumption[hour] += float(item.get("consumption", item.get("value", 0)))
+                        hourly_consumption[hour] += consumption_value
+                        daily_consumption += consumption_value
 
-        # Match hourly consumption with hourly prices
-        energy_cost = 0.0
-        matched_hours = 0
-        for hour, consumption_value in hourly_consumption.items():
-            # Find matching price for this hour
-            for price in prices:
-                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
-                if price_dt_madrid and price_dt_madrid.date() == target_date and price_dt_madrid.hour == hour:
-                    energy_cost += consumption_value * price.get("price_per_kwh", 0)
-                    matched_hours += 1
-                    break
+        if daily_consumption == 0.0:
+            return 0.0
 
-        # If we couldn't match hourly consumption with hourly prices,
-        # fall back to using daily total consumption and average price
-        if matched_hours == 0:
-            # Calculate daily total consumption
-            daily_consumption = sum(hourly_consumption.values())
+        # Get tariff configuration
+        entry = self.coordinator._entry
+        tariff_calculator = self.coordinator._tariff_calculator
+        pricing_model = entry.data.get("pricing_model", PRICING_MODEL_MARKET)
+        
+        # For fixed tariffs, calculate using fixed rates
+        if pricing_model == PRICING_MODEL_FIXED:
+            energy_cost = 0.0
+            target_dt = datetime.combine(target_date, datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
+            is_weekday = target_dt.weekday() < 5
             
-            # Get prices for the target date
-            daily_prices: list[float] = []
-            for price in prices:
-                price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
-                if price_dt_madrid and price_dt_madrid.date() == target_date:
-                    daily_prices.append(price.get("price_per_kwh", 0))
-
-            if daily_prices:
-                # Calculate average price for the day
-                avg_price = sum(daily_prices) / len(daily_prices)
-                energy_cost = daily_consumption * avg_price
-
-        return energy_cost
+            for hour, consumption_value in hourly_consumption.items():
+                # Get rate for this hour using tariff calculator logic
+                period, period_rate = tariff_calculator._get_period_for_hour(hour, is_weekday)
+                if period_rate is not None:
+                    energy_cost += consumption_value * period_rate
+                else:
+                    # Fallback to fixed_rate if available
+                    if tariff_calculator._config.fixed_rate is not None:
+                        energy_cost += consumption_value * tariff_calculator._config.fixed_rate
+            
+            return energy_cost
+        
+        # For market tariffs, try to match with prices for the target date
+        # First, try to find prices for the exact target date
+        day_prices: list[dict[str, Any]] = []
+        for price in prices:
+            price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+            if price_dt_madrid and price_dt_madrid.date() == target_date:
+                day_prices.append(price)
+        
+        # If we have prices for the target date, use them
+        if day_prices:
+            energy_cost = 0.0
+            matched_hours = 0
+            for hour, consumption_value in hourly_consumption.items():
+                # Find matching price for this hour
+                for price in day_prices:
+                    price_dt_madrid = _parse_datetime_to_madrid(price.get("start_time", ""))
+                    if price_dt_madrid and price_dt_madrid.hour == hour:
+                        # Apply tariff calculator to get final price (with discounts, etc.)
+                        calculated_prices = tariff_calculator.calculate_prices([price], target_date)
+                        if calculated_prices:
+                            energy_cost += consumption_value * calculated_prices[0].get("price_per_kwh", 0)
+                            matched_hours += 1
+                            break
+            
+            # If we matched some hours, return the cost
+            if matched_hours > 0:
+                return energy_cost
+        
+        # Fallback: Use average price from available prices (today's prices as estimate)
+        # This is not ideal but better than returning 0
+        if prices:
+            # Calculate average price from today's prices (as estimate for past dates)
+            avg_price = sum(p.get("price_per_kwh", 0) for p in prices) / len(prices)
+            # Apply tariff calculator to get final price
+            sample_price = {"start_time": datetime.combine(target_date, datetime.min.time()).isoformat(), "price_per_kwh": avg_price}
+            calculated_prices = tariff_calculator.calculate_prices([sample_price], target_date)
+            if calculated_prices:
+                estimated_price = calculated_prices[0].get("price_per_kwh", avg_price)
+                return daily_consumption * estimated_price
+        
+        # Last resort: return 0 if no prices available
+        return 0.0
 
     @property
     def native_value(self) -> float | None:
