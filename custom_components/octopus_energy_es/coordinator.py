@@ -18,6 +18,8 @@ from .const import (
     CONF_PVPC_SENSOR,
     DOMAIN,
     MARKET_PUBLISH_HOUR,
+    PRICING_MODEL_FIXED,
+    PRICING_MODEL_MARKET,
     TIMEZONE_MADRID,
     UPDATE_INTERVAL_BILLING,
     UPDATE_INTERVAL_CONSUMPTION,
@@ -76,6 +78,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
+        self._first_update_attempted: bool = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from APIs."""
@@ -87,14 +90,33 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             prices = await self._fetch_and_calculate_prices()
             if prices:
                 self._today_prices = prices
+                self._first_update_attempted = True
                 _LOGGER.info("Successfully fetched %d price points for today", len(prices))
             elif not self._today_prices:
-                # No prices and no cached data - log warning but don't fail completely
-                _LOGGER.warning("No price data available and no cached data")
+                # No prices and no cached data
+                if not self._first_update_attempted:
+                    # First update attempt - PVPC sensor might not be ready yet
+                    # Don't fail, just log a warning and return empty data
+                    _LOGGER.info("No price data available on first update attempt (PVPC sensor may not be ready yet). Will retry on next update.")
+                    self._first_update_attempted = True
+                else:
+                    # Subsequent updates - this is a real issue
+                    _LOGGER.warning("No price data available and no cached data")
         except Exception as err:
+            error_msg = str(err).lower()
             _LOGGER.error("Error updating today's prices: %s", err, exc_info=True)
-            if not self._today_prices:
-                # Only fail if we have no cached data at all
+            
+            # Check if this is a PVPC sensor not found error on first update
+            is_pvpc_not_found = "pvpc sensor" in error_msg and "not found" in error_msg
+            is_first_update = not self._first_update_attempted
+            
+            if is_pvpc_not_found and is_first_update:
+                # PVPC sensor not ready yet on first update - don't fail
+                _LOGGER.info("PVPC sensor not ready on first update attempt. Will retry on next update.")
+                self._first_update_attempted = True
+                # Don't raise UpdateFailed - allow coordinator to retry
+            elif not self._today_prices:
+                # Only fail if we have no cached data and it's not a first-update timing issue
                 _LOGGER.error("No cached price data available, raising UpdateFailed")
                 raise UpdateFailed(f"Error updating prices: {err}") from err
             else:
@@ -243,8 +265,36 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
     ) -> list[dict[str, Any]]:
         """Fetch market prices from PVPC sensor and calculate tariff prices."""
         market_prices: list[dict[str, Any]] = []
+        
+        # Check if this is a fixed pricing tariff - if so, generate hourly structure directly
+        pricing_model = self._entry.data.get("pricing_model", PRICING_MODEL_MARKET)
+        if pricing_model == PRICING_MODEL_FIXED:
+            # For fixed pricing, we don't need market prices - generate hourly structure
+            if target_date is None:
+                price_date = datetime.now(self._timezone).date()
+            else:
+                price_date = target_date
+            
+            # Generate 24 hourly entries (tariff calculator will apply fixed rates)
+            for hour in range(24):
+                hour_datetime = datetime.combine(
+                    price_date,
+                    datetime.min.time().replace(hour=hour),
+                    self._timezone
+                )
+                market_prices.append({
+                    "start_time": hour_datetime.isoformat(),
+                    "price_per_kwh": 0.0,  # Dummy value - will be replaced by fixed rate
+                })
+            
+            _LOGGER.debug("Generated %d hourly entries for fixed pricing", len(market_prices))
+            # Calculate prices using tariff calculator (will apply fixed rates)
+            calculated_prices = self._tariff_calculator.calculate_prices(
+                market_prices, target_date
+            )
+            return calculated_prices
 
-        # Try PVPC sensor first
+        # For market pricing, try PVPC sensor first
         try:
             _LOGGER.debug("Fetching prices from PVPC sensor: %s", self._pvpc_sensor)
             pvpc_state = self._hass.states.get(self._pvpc_sensor)
