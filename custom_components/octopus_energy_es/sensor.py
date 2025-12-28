@@ -411,6 +411,10 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
+        # Use the key (which includes octopus_energy_es_ prefix) for entity ID generation
+        # Home Assistant will slugify this to create the entity ID
+        # The display name (friendly_name) will still come from description.name
+        self._attr_name = description.key
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": "Octopus Energy España",
@@ -667,7 +671,7 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
                 hour_key = f"hour_{hour_num:02d}"
                 
                 if hour_dt in hourly_totals:
-                    hourly_breakdown[hour_key] = round(hourly_totals[hour_dt], 3)
+                    hourly_breakdown[hour_key] = hourly_totals[hour_dt]
                 else:
                     hourly_breakdown[hour_key] = 0.0
             
@@ -834,8 +838,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             self._consumption_month = current_month_key
             self._is_current_month = True
 
-        # Round weekly breakdown values
-        weekly_breakdown = {k: round(v, 3) for k, v in weekly_breakdown.items()}
+        # Keep weekly breakdown values precise (not rounded)
 
         # Update tracking
         self._last_monthly_update = current_week_start
@@ -954,7 +957,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             if check_date <= today and check_date in daily_totals:
                 day_value = daily_totals[check_date]
                 cumulative_total += day_value
-                daily_breakdown[day_names[i]] = round(day_value, 3)
+                daily_breakdown[day_names[i]] = day_value
                 has_current_week_data = True
 
         if has_current_week_data and cumulative_total > 0:
@@ -973,7 +976,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
                 if check_date in daily_totals:
                     day_value = daily_totals[check_date]
                     cumulative_total += day_value
-                    daily_breakdown[day_names[i]] = round(day_value, 3)
+                    daily_breakdown[day_names[i]] = day_value
 
             if cumulative_total > 0:
                 self._consumption_week_start = most_recent_week_start
@@ -1093,7 +1096,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             if month_key in monthly_totals:
                 month_value = monthly_totals[month_key]
                 cumulative_total += month_value
-                monthly_breakdown[month_names[month_num - 1]] = round(month_value, 3)
+                monthly_breakdown[month_names[month_num - 1]] = month_value
 
         # Determine which year to display
         display_year = current_year
@@ -1116,7 +1119,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
                     if month_key in monthly_totals:
                         month_value = monthly_totals[month_key]
                         cumulative_total += month_value
-                        monthly_breakdown[month_names[month_num - 1]] = round(month_value, 3)
+                        monthly_breakdown[month_names[month_num - 1]] = month_value
 
         # Check if we should update (only if month has changed or first run)
         should_update = (
