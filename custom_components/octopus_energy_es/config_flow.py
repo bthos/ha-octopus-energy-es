@@ -420,15 +420,15 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle other concepts configuration (optional)."""
         if user_input is not None:
             if user_input.get("has_other_concepts"):
-                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.0)
+                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
             return await self.async_step_taxes()
 
         return self.async_show_form(
             step_id="other_concepts",
             data_schema=vol.Schema(
                 {
-                    vol.Required("has_other_concepts", default=False): bool,
-                    vol.Optional(CONF_OTHER_CONCEPTS_RATE, default=0.0): vol.Coerce(float),
+                    vol.Required("has_other_concepts", default=True): bool,
+                    vol.Optional(CONF_OTHER_CONCEPTS_RATE, default=0.04): vol.Coerce(float),
                 }
             ),
         )
