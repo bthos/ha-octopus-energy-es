@@ -211,8 +211,8 @@ PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Average Price (24h)",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
-    suggested_display_precision=3,
     icon="mdi:chart-timeline-variant",
+    suggested_display_precision=4,
 )
 
 CURRENT_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -220,7 +220,8 @@ CURRENT_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Current Price",
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:cash",
+    icon="mdi:currency-eur",
+    suggested_display_precision=4,
 )
 
 MIN_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -229,6 +230,7 @@ MIN_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:trending-down",
+    suggested_display_precision=4,
 )
 
 MAX_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -237,6 +239,7 @@ MAX_PRICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     native_unit_of_measurement="€/kWh",
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:trending-up",
+    suggested_display_precision=4,
 )
 
 CHEAPEST_HOUR_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -252,6 +255,7 @@ DAILY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
+    suggested_display_precision=3,
 )
 
 HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -261,6 +265,7 @@ HOURLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
+    suggested_display_precision=3,
 )
 
 MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -270,6 +275,7 @@ MONTHLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
+    suggested_display_precision=3,
 )
 
 WEEKLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -279,6 +285,7 @@ WEEKLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
+    suggested_display_precision=3,
 )
 
 YEARLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -288,6 +295,7 @@ YEARLY_CONSUMPTION_SENSOR_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL,
     icon="mdi:lightning-bolt",
+    suggested_display_precision=3,
 )
 
 DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -295,7 +303,8 @@ DAILY_COST_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Daily Cost",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
+    icon="mdi:cash",
+    suggested_display_precision=2,
 )
 
 LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -303,7 +312,8 @@ LAST_INVOICE_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Last Invoice",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:receipt",
+    icon="mdi:invoice-text",
+    suggested_display_precision=2,
 )
 
 BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -317,7 +327,8 @@ CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Credits",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
+    icon="mdi:piggy-bank-outline",
+    suggested_display_precision=2,
 )
 
 CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -325,7 +336,8 @@ CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Credits (Estimated)",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:currency-eur",
+    icon="mdi:piggy-bank-outline",
+    suggested_display_precision=2,
 )
 
 ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -339,7 +351,16 @@ NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
     name="Next Invoice (Estimated)",
     native_unit_of_measurement="€",
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:receipt-text",
+    icon="mdi:invoice-text-clock",
+    suggested_display_precision=2,
+)
+
+SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="octopus_energy_es_solar_wallet",
+    name="Solar Wallet",
+    native_unit_of_measurement="€",
+    state_class=SensorStateClass.TOTAL,
+    icon="mdi:wallet-bifold-outline",
     suggested_display_precision=2,
 )
 
@@ -383,6 +404,7 @@ async def async_setup_entry(
         OctopusEnergyESCreditsEstimatedSensor(
             coordinator, CREDITS_ESTIMATED_SENSOR_DESCRIPTION
         ),
+        OctopusEnergyESSolarWalletSensor(coordinator, SOLAR_WALLET_SENSOR_DESCRIPTION),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
     ]
 
@@ -410,12 +432,12 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def _has_data(self) -> bool:
-        """Check if coordinator has successfully updated and has data."""
-        # Check if coordinator has never successfully updated
-        if not self.coordinator.last_update_success:
-            return False
-        # Check if coordinator.data exists
+        """Check if coordinator has data available."""
+        # Check if coordinator.data exists and is a dict
+        # Allow using cached data even if last update failed
         if self.coordinator.data is None:
+            return False
+        if not isinstance(self.coordinator.data, dict):
             return False
         return True
 
@@ -1499,6 +1521,31 @@ class OctopusEnergyESBillingPeriodSensor(OctopusEnergyESSensor):
 
         if start and end:
             return f"{start} to {end}"
+
+        return None
+
+
+class OctopusEnergyESSolarWalletSensor(OctopusEnergyESSensor):
+    """Solar Wallet sensor."""
+
+    @property
+    def native_value(self) -> float | None:
+        """Return Solar Wallet balance."""
+        if not self._has_data:
+            return None
+            
+        data = self.coordinator.data
+        billing = data.get("billing", {})
+
+        if not billing:
+            return None
+
+        solar_wallet = billing.get("solar_wallet")
+        if solar_wallet is not None:
+            # Balance is already in euros (converted from cents in API client)
+            balance = float(solar_wallet)
+            # Return 0.0 if balance is 0 to avoid showing "Unknown"
+            return balance if balance != 0.0 else 0.0
 
         return None
 
