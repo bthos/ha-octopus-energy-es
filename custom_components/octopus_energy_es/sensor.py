@@ -411,12 +411,21 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
+        # Use the key (which includes octopus_energy_es_ prefix) for entity ID generation
+        # Home Assistant will slugify this to create the entity ID
+        self._attr_name = description.key
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": "Octopus Energy España",
             "manufacturer": "Octopus Energy España",
             "model": coordinator._entry.data.get("pricing_model", "Unknown"),
         }
+
+    @property
+    def name(self) -> str | None:
+        """Return the friendly name of the sensor."""
+        # Return the friendly name from description, not the key
+        return self.entity_description.name
 
     @property
     def _has_data(self) -> bool:
@@ -839,7 +848,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
         self._cumulative_monthly_total = cumulative_total
         self._weekly_breakdown = weekly_breakdown
 
-        return cumulative_total, 3
+        return cumulative_total
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
