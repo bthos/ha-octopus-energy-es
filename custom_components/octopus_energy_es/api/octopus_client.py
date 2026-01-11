@@ -285,7 +285,7 @@ class OctopusClient:
         Args:
             start_date: Start date for consumption data
             end_date: End date for consumption data
-            granularity: 'hourly' or 'daily'
+            granularity: 'hourly', 'daily', or 'monthly'
             use_property_query: If True, use property-based query (more efficient, default).
                                If False, use account-based query (fallback).
 
@@ -323,7 +323,7 @@ class OctopusClient:
         Args:
             start_date: Start date for this chunk
             end_date: End date for this chunk
-            granularity: 'hourly' or 'daily'
+            granularity: 'hourly', 'daily', or 'monthly'
             use_property_query: If True, use property-based query
             
         Returns:
@@ -388,7 +388,7 @@ class OctopusClient:
         Args:
             start_date: Start date for consumption data
             end_date: End date for consumption data
-            granularity: 'hourly' or 'daily'
+            granularity: 'hourly', 'daily', or 'monthly'
             
         Returns:
             List of consumption data dictionaries
@@ -482,8 +482,12 @@ class OctopusClient:
         days_diff = (end_date - start_date).days + 1
         if granularity == "hourly":
             first = days_diff * 24
-        else:
+        elif granularity == "daily":
             first = days_diff
+        else:  # monthly
+            # Approximate months (rough estimate)
+            months_diff = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+            first = months_diff
         
         # Limit to reasonable page size (API may have limits)
         # Dashboard uses 30 for monthly view, so we'll use similar limits
@@ -496,8 +500,13 @@ class OctopusClient:
             # Fetch all pages
             while True:
                 # Determine reading frequency type based on granularity
-                # Dashboard uses "DAY_INTERVAL" for daily data
-                reading_frequency_type = "DAY_INTERVAL" if granularity == "daily" else "HOUR_INTERVAL"
+                # Dashboard uses "DAY_INTERVAL" for daily data, "MONTH_INTERVAL" for monthly data
+                if granularity == "daily":
+                    reading_frequency_type = "DAY_INTERVAL"
+                elif granularity == "monthly":
+                    reading_frequency_type = "MONTH_INTERVAL"
+                else:
+                    reading_frequency_type = "HOUR_INTERVAL"
                 
                 # Format dates as UTC timestamps matching dashboard format
                 # Dashboard adjusts for DST:
@@ -522,11 +531,17 @@ class OctopusClient:
                 end_madrid = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=ZoneInfo(TIMEZONE_MADRID))
                 end_dt = end_madrid.astimezone(tz.utc)
                 
+                # Format datetime as ISO 8601 with milliseconds and Z suffix
+                # Format: "2026-01-10T23:00:00.000Z" (matching API examples)
+                def format_datetime_iso(dt: datetime) -> str:
+                    """Format datetime to ISO 8601 with milliseconds and Z suffix."""
+                    return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                
                 variables: dict[str, Any] = {
                     "propertyId": property_id,
                     "first": page_size,
-                    "startAt": start_dt.isoformat().replace("+00:00", "Z"),
-                    "endAt": end_dt.isoformat().replace("+00:00", "Z"),
+                    "startAt": format_datetime_iso(start_dt),
+                    "endAt": format_datetime_iso(end_dt),
                     "timezone": "Europe/Madrid",
                     "utilityFilters": [
                         {
@@ -752,8 +767,12 @@ class OctopusClient:
         days_diff = (end_date - start_date).days + 1
         if granularity == "hourly":
             first = days_diff * 24
-        else:
+        elif granularity == "daily":
             first = days_diff
+        else:  # monthly
+            # Approximate months (rough estimate)
+            months_diff = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+            first = months_diff
         
         # Limit to reasonable page size
         page_size = min(first, 100)
@@ -1477,3 +1496,58 @@ class OctopusClient:
             _LOGGER.error("Error fetching account info: %s", err, exc_info=True)
             return None
 
+    async def fetch_devices(self, account_number: str | None = None) -> list[dict[str, Any]]:
+        """
+        Fetch devices for an account using GraphQL.
+
+        Args:
+            account_number: Account number. If None, will use self._property_id.
+
+        Returns:
+            List of device dictionaries with deviceType and status, or empty list if not available
+        """
+        # Use provided account_number or fall back to property_id
+        if account_number is None:
+            account_number = self._property_id
+        
+        if not account_number:
+            _LOGGER.debug("No account number available for fetching devices")
+            return []
+        
+        query = """
+            query getDevices($accountNumber: String!) {
+                devices(accountNumber: $accountNumber) {
+                    deviceType
+                    status {
+                        current
+                    }
+                }
+            }
+        """
+        
+        try:
+            response = await self._execute_graphql_with_retry(
+                query, {"accountNumber": account_number}
+            )
+            
+            if "errors" in response:
+                _LOGGER.error("GraphQL error fetching devices: %s", response["errors"])
+                return []
+            
+            if "data" not in response or "devices" not in response["data"]:
+                _LOGGER.warning("Unexpected response format when fetching devices")
+                return []
+            
+            devices = response["data"]["devices"]
+            if not isinstance(devices, list):
+                _LOGGER.warning("Devices data is not a list: %s", type(devices))
+                return []
+            
+            _LOGGER.debug("Fetched %d devices", len(devices))
+            return devices
+            
+        except Exception as err:
+            if isinstance(err, OctopusClientError):
+                raise
+            _LOGGER.error("Error fetching devices: %s", err)
+            raise OctopusClientError(f"Error fetching devices: {err}") from err

@@ -71,7 +71,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._today_prices: list[dict[str, Any]] = []
         self._tomorrow_prices: list[dict[str, Any]] = []
         self._consumption_data_hourly: list[dict[str, Any]] = []  # Hourly data for Daily Consumption, Daily Cost, Credits Estimated
-        self._consumption_data_daily: list[dict[str, Any]] = []  # Daily data for Weekly, Monthly, Yearly Consumption
+        self._consumption_data_daily: list[dict[str, Any]] = []  # Daily data for Weekly, Monthly, Next Invoice (last 30 days)
+        self._consumption_data_monthly: list[dict[str, Any]] = []  # Monthly data for Yearly Consumption (from start of year)
         self._billing_data: dict[str, Any] = {}
         self._credits_data: dict[str, Any] = {}
         self._account_data: dict[str, Any] = {}
@@ -85,6 +86,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._last_tomorrow_update: datetime | None = None
         self._last_consumption_hourly_update: date | None = None
         self._last_consumption_daily_update: date | None = None
+        self._last_consumption_monthly_update: date | None = None
         self._last_billing_update: date | None = None
         self._last_credits_update: date | None = None
         self._last_account_update: date | None = None
@@ -206,8 +208,12 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     exc_info=True
                 )
         
-        # Update daily consumption data (for Weekly, Monthly, Yearly Consumption)
-        # Need data from start of year for Yearly sensor
+        # Update daily consumption data (for Weekly, Monthly, Yearly Consumption, Next Invoice)
+        # Optimize: Only fetch what's needed:
+        # - Weekly: last 7 days
+        # - Monthly: last 30 days  
+        # - Yearly: use monthly granularity from start of year (more efficient)
+        # - Next Invoice: typically needs last 30 days (billing period)
         should_update_consumption_daily = (
             self._last_consumption_daily_update is None
             or self._last_consumption_daily_update < now.date()
@@ -216,7 +222,9 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         if should_update_consumption_daily and self._octopus_client:
             try:
                 end_date = now.date()
-                start_date = date(end_date.year, 1, 1)  # From start of year
+                # For daily data: fetch last 30 days (covers Weekly, Monthly, Next Invoice needs)
+                # Yearly sensor will use monthly granularity data instead
+                start_date = end_date - timedelta(days=30)
                 consumption_daily_result = await self._octopus_client.fetch_consumption(
                     start_date=start_date,
                     end_date=end_date,
@@ -226,7 +234,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 self._last_consumption_daily_update = now.date()
                 if consumption_daily_result:
                     _LOGGER.debug(
-                        "Fetched %d daily consumption measurements (from start of year)",
+                        "Fetched %d daily consumption measurements (last 30 days)",
                         len(consumption_daily_result)
                     )
                 else:
@@ -246,6 +254,53 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(
                     "Unexpected error updating daily consumption data: %s. "
                     "Weekly/Monthly/Yearly consumption sensors will show as Unknown.",
+                    err,
+                    exc_info=True
+                )
+        
+        # Update monthly consumption data (for Yearly Consumption)
+        # Use monthly granularity for efficiency - only fetch once per month
+        should_update_consumption_monthly = (
+            self._last_consumption_monthly_update is None
+            or (
+                self._last_consumption_monthly_update.month != now.month
+                or self._last_consumption_monthly_update.year != now.year
+            )
+        )
+        
+        if should_update_consumption_monthly and self._octopus_client:
+            try:
+                end_date = now.date()
+                start_date = date(end_date.year, 1, 1)  # From start of year
+                consumption_monthly_result = await self._octopus_client.fetch_consumption(
+                    start_date=start_date,
+                    end_date=end_date,
+                    granularity="monthly"
+                )
+                self._consumption_data_monthly = consumption_monthly_result or []
+                self._last_consumption_monthly_update = now.date()
+                if consumption_monthly_result:
+                    _LOGGER.debug(
+                        "Fetched %d monthly consumption measurements (from start of year)",
+                        len(consumption_monthly_result)
+                    )
+                else:
+                    _LOGGER.debug("No monthly consumption data returned from API")
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                self._consumption_data_monthly = []  # Reset on error
+                if "not available" not in error_msg and "not be publicly" not in error_msg:
+                    _LOGGER.warning(
+                        "Error updating monthly consumption data: %s. "
+                        "Yearly consumption sensor will show as Unknown.",
+                        err
+                    )
+                # Consumption is optional, don't fail
+            except Exception as err:
+                self._consumption_data_monthly = []  # Reset on unexpected error
+                _LOGGER.warning(
+                    "Unexpected error updating monthly consumption data: %s. "
+                    "Yearly consumption sensor will show as Unknown.",
                     err,
                     exc_info=True
                 )
@@ -356,6 +411,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             "tomorrow_prices": self._tomorrow_prices or [],
             "consumption_hourly": self._consumption_data_hourly or [],
             "consumption_daily": self._consumption_data_daily or [],
+            "consumption_monthly": self._consumption_data_monthly or [],
             # For backward compatibility, also include hourly as default consumption
             "consumption": self._consumption_data_hourly or [],
             "billing": self._billing_data or {},

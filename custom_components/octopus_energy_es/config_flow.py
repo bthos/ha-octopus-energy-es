@@ -312,10 +312,18 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._data[CONF_POWER_P1_RATE] = float(fixed_term[0])
                     self._data[CONF_POWER_P2_RATE] = float(fixed_term[1])
                 
-                # Solar surplus rate (optional) - only set if > 0
+                # Solar surplus rate (optional)
+                # Track if surplus_rate was provided by API (even if 0) to skip form
                 surplus_rate = prices.get("surplus_rate")
-                if surplus_rate is not None and float(surplus_rate) > 0:
-                    self._data[CONF_SOLAR_SURPLUS_RATE] = float(surplus_rate)
+                if surplus_rate is not None:
+                    surplus_rate_float = float(surplus_rate)
+                    # Mark that surplus_rate came from API
+                    self._data["_surplus_rate_from_api"] = True
+                    # Only set CONF_SOLAR_SURPLUS_RATE if > 0 (for enabling solar features)
+                    if surplus_rate_float > 0:
+                        self._data[CONF_SOLAR_SURPLUS_RATE] = surplus_rate_float
+                    # If = 0, don't set CONF_SOLAR_SURPLUS_RATE (solar features disabled)
+                    # but _surplus_rate_from_api flag will skip the form
                     
             elif product_type == "MARKET" or product_type == "":
                 # Market pricing or unknown type defaults to market
@@ -634,10 +642,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_discount_programs()
         
         # Skip if surplus_rate came from API (auto-configured)
-        surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
-        if self._auto_configured and surplus_rate_value is not None:
+        # Check if surplus_rate was provided by API (even if it was 0)
+        surplus_rate_from_api = self._data.get("_surplus_rate_from_api", False)
+        if self._auto_configured and surplus_rate_from_api:
             # Value came from API, skip form and proceed (whether > 0 or = 0)
-            # If > 0, solar features are enabled; if = 0, they are disabled
+            # If > 0, solar features are enabled (CONF_SOLAR_SURPLUS_RATE is set)
+            # If = 0, solar features are disabled (CONF_SOLAR_SURPLUS_RATE is not set)
             return await self.async_step_discount_programs()
         
         # Check if surplus_rate is already set (from auto-config) and > 0
@@ -836,9 +846,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if pricing_model == PRICING_MODEL_MARKET and CONF_PVPC_SENSOR not in self._data:
             self._data[CONF_PVPC_SENSOR] = "sensor.pvpc"
         
+        # Remove temporary flags before saving (keep _tariff_info)
+        entry_data = {k: v for k, v in self._data.items() if not k.startswith("_") or k == "_tariff_info"}
+        
         return self.async_create_entry(
             title=tariff_name,
-            data=self._data,
+            data=entry_data,
         )
 
     @staticmethod
@@ -1308,7 +1321,9 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntr
         
         for key, value in self._data.items():
             if key not in data_keys_to_keep:
-                options_data[key] = value
+                # Skip temporary flags (keep _tariff_info)
+                if not (key.startswith("_") and key != "_tariff_info"):
+                    options_data[key] = value
         
         # Preserve _tariff_info if it wasn't updated
         if current_tariff_info and "_tariff_info" not in options_data:

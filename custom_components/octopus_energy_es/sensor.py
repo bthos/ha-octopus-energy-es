@@ -474,7 +474,7 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         # Check if any of the main data sources have actual data (not empty lists/dicts)
         has_prices = bool(data.get("today_prices") or data.get("tomorrow_prices"))
-        has_consumption = bool(data.get("consumption_hourly") or data.get("consumption_daily"))
+        has_consumption = bool(data.get("consumption_hourly") or data.get("consumption_daily") or data.get("consumption_monthly"))
         has_billing = bool(data.get("billing") and isinstance(data.get("billing"), dict) and data.get("billing"))
         has_credits = bool(data.get("credits") and isinstance(data.get("credits"), dict) and data.get("credits"))
         has_account = bool(data.get("account") and isinstance(data.get("account"), dict) and data.get("account"))
@@ -1082,7 +1082,8 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption_daily", [])  # Use daily data for yearly consumption
+        # Use monthly data if available (more efficient), fallback to daily
+        consumption = data.get("consumption_monthly", []) or data.get("consumption_daily", [])
 
         if not consumption:
             self._consumption_year = None
