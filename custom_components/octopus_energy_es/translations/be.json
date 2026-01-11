@@ -97,6 +97,13 @@
           "pvpc_sensor": "Ідэнтыфікатар сутнасці датчыка PVPC"
         }
       },
+      "tariff_name": {
+        "title": "Назва тарыфу",
+        "description": "Увядзіце назву для гэтай канфігурацыі тарыфу.\n\n{name_info}",
+        "data": {
+          "name": "Назва тарыфу"
+        }
+      },
       "integration_settings": {
         "title": "Налады інтэграцыі",
         "description": "Наладзьце налады інтэграцыі.\n\n{debug_info}",

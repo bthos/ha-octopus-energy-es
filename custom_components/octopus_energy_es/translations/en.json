@@ -97,6 +97,13 @@
           "pvpc_sensor": "PVPC Sensor Entity ID"
         }
       },
+      "tariff_name": {
+        "title": "Tariff Name",
+        "description": "Enter a name for this tariff configuration.\n\n{name_info}",
+        "data": {
+          "name": "Tariff Name"
+        }
+      },
       "integration_settings": {
         "title": "Integration Settings",
         "description": "Configure integration settings.\n\n{debug_info}",

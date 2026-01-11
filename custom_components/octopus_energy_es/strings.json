@@ -97,6 +97,13 @@
           "pvpc_sensor": "[%key:octopus_energy_es::config::step::pvpc_sensor::data::pvpc_sensor%]"
         }
       },
+      "tariff_name": {
+        "title": "[%key:octopus_energy_es::config::step::tariff_name::title%]",
+        "description": "[%key:octopus_energy_es::config::step::tariff_name::description%]",
+        "data": {
+          "name": "[%key:octopus_energy_es::config::step::tariff_name::data::name%]"
+        }
+      },
       "integration_settings": {
         "title": "[%key:octopus_energy_es::config::step::integration_settings::title%]",
         "description": "[%key:octopus_energy_es::config::step::integration_settings::description%]",

@@ -19,6 +19,7 @@ from .const import (
     CONF_ELECTRICITY_TAX_RATE,
     CONF_FIXED_RATE,
     CONF_MANAGEMENT_FEE_MONTHLY,
+    CONF_NAME,
     CONF_OTHER_CONCEPTS_RATE,
     CONF_P1_HOURS_WEEKDAYS,
     CONF_P1_RATE,
@@ -448,8 +449,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if pricing_model == PRICING_MODEL_MARKET:
                 return await self.async_step_pvpc_sensor()
             else:
-                # Fixed pricing - skip PVPC sensor and create entry
-                return self._create_entry()
+                # Fixed pricing - skip PVPC sensor and go to tariff name
+                return await self.async_step_tariff_name()
 
         return self.async_show_form(
             step_id="taxes",
@@ -472,7 +473,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
-            return self._create_entry()
+            return await self.async_step_tariff_name()
 
         return self.async_show_form(
             step_id="pvpc_sensor",
@@ -483,23 +484,65 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    async def async_step_tariff_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle tariff name input."""
+        if user_input is not None:
+            tariff_name = user_input.get(CONF_NAME, "").strip()
+            if tariff_name:
+                self._data[CONF_NAME] = tariff_name
+            return self._create_entry()
+
+        # Generate default name based on pricing model
+        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+        
+        if pricing_model == PRICING_MODEL_FIXED:
+            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                default_name = "Octopus Relax"
+            else:
+                default_name = "Octopus Solar"
+        else:
+            default_name = "Octopus Flexi"
+
+        return self.async_show_form(
+            step_id="tariff_name",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_NAME, default=default_name): str,
+                }
+            ),
+            description_placeholders={
+                "name_info": (
+                    "Enter a name for this tariff configuration. "
+                    "This name will be used to identify this service in Home Assistant."
+                ),
+            },
+        )
+
     def _create_entry(self) -> FlowResult:
         """Create the config entry."""
-        # Generate title based on pricing model
-        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-        model_name = "Fixed" if pricing_model == PRICING_MODEL_FIXED else "Market"
+        # Use tariff name from config, or generate default if not set
+        tariff_name = self._data.get(CONF_NAME, "").strip()
+        if not tariff_name:
+            # Fallback to generated name if not provided
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            model_name = "Fixed" if pricing_model == PRICING_MODEL_FIXED else "Market"
+            tariff_name = f"Octopus Energy España - {model_name}"
         
         # Set default PVPC sensor for market pricing if not set
+        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         if pricing_model == PRICING_MODEL_MARKET and CONF_PVPC_SENSOR not in self._data:
             self._data[CONF_PVPC_SENSOR] = "sensor.pvpc"
         
         return self.async_create_entry(
-            title=f"Octopus Energy España - {model_name}",
+            title=tariff_name,
             data=self._data,
         )
 
     @staticmethod
-    async def async_get_options_flow(config_entry: ConfigEntry) -> config_entries.OptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
         return OctopusEnergyESOptionsFlowHandler(config_entry)
 
@@ -529,7 +572,49 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
         self._pricing_model = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         self._time_structure = self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
         
-        return await self.async_step_pricing_model()
+        return await self.async_step_tariff_name()
+
+    async def async_step_tariff_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle tariff name input."""
+        if user_input is not None:
+            tariff_name = user_input.get(CONF_NAME, "").strip()
+            if tariff_name:
+                self._data[CONF_NAME] = tariff_name
+            return await self.async_step_pricing_model()
+
+        # Use current entry title as default, or generate default name
+        current_name = self.config_entry.title
+        if not current_name or current_name.startswith("Octopus Energy España"):
+            # Generate default name based on pricing model
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+            
+            if pricing_model == PRICING_MODEL_FIXED:
+                if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                    default_name = "Octopus Relax"
+                else:
+                    default_name = "Octopus Solar"
+            else:
+                default_name = "Octopus Flexi"
+        else:
+            default_name = current_name
+
+        return self.async_show_form(
+            step_id="tariff_name",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_NAME, default=default_name): str,
+                }
+            ),
+            description_placeholders={
+                "name_info": (
+                    "Enter a name for this tariff configuration. "
+                    "This name will be used to identify this service in Home Assistant."
+                ),
+            },
+        )
 
     async def async_step_pricing_model(
         self, user_input: dict[str, Any] | None = None
@@ -900,8 +985,14 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
         options_data = {}
         data_keys_to_keep = {CONF_EMAIL, CONF_PASSWORD, CONF_PROPERTY_ID}
         
+        # Get tariff name for title
+        tariff_name = self._data.get(CONF_NAME, "").strip()
+        if not tariff_name:
+            # Use current entry title if name not provided
+            tariff_name = self.config_entry.title
+        
         for key, value in self._data.items():
             if key not in data_keys_to_keep:
                 options_data[key] = value
         
-        return self.async_create_entry(title="", data=options_data)
+        return self.async_create_entry(title=tariff_name, data=options_data)

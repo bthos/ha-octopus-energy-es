@@ -9,6 +9,7 @@ DOMAIN = "octopus_energy_es"
 CONF_PROPERTY_ID = "property_id"
 CONF_PVPC_SENSOR = "pvpc_sensor"
 CONF_DEBUG = "debug"
+CONF_NAME = "name"
 
 # Tariff category configuration keys
 CONF_PRICING_MODEL = "pricing_model"

@@ -97,6 +97,13 @@
           "pvpc_sensor": "ID de Entidad del Sensor PVPC"
         }
       },
+      "tariff_name": {
+        "title": "Nombre del Tarifa",
+        "description": "Introduzca un nombre para esta configuración de tarifa.\n\n{name_info}",
+        "data": {
+          "name": "Nombre del Tarifa"
+        }
+      },
       "integration_settings": {
         "title": "Configuración de la Integración",
         "description": "Configure la configuración de la integración.\n\n{debug_info}",
