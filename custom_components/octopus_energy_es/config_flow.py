@@ -465,6 +465,17 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_TIME_STRUCTURE] = self._time_structure
                 return await self.async_step_energy_rates()
 
+        # Skip if value came from API (auto-configured)
+        if self._auto_configured and CONF_PRICING_MODEL in self._data:
+            self._pricing_model = self._data[CONF_PRICING_MODEL]
+            if self._pricing_model == PRICING_MODEL_FIXED:
+                return await self.async_step_time_structure()
+            else:
+                # Market pricing - skip time structure step
+                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                self._data[CONF_TIME_STRUCTURE] = self._time_structure
+                return await self.async_step_energy_rates()
+        
         # Use value from self._data if available (from auto-config)
         pricing_model_default = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         
@@ -491,6 +502,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_TIME_STRUCTURE] = self._time_structure
             return await self.async_step_energy_rates()
 
+        # Skip if value came from API (auto-configured)
+        if self._auto_configured and CONF_TIME_STRUCTURE in self._data:
+            self._time_structure = self._data[CONF_TIME_STRUCTURE]
+            return await self.async_step_energy_rates()
+        
         # Use value from self._data if available (from auto-config)
         time_structure_default = self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
         
@@ -528,6 +544,21 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
 
+        # Skip if values came from API (auto-configured)
+        if self._auto_configured:
+            if pricing_model == PRICING_MODEL_FIXED:
+                if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                    if CONF_FIXED_RATE in self._data:
+                        return await self.async_step_power_rates()
+                elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
+                    if (CONF_P1_RATE in self._data and 
+                        CONF_P2_RATE in self._data and 
+                        CONF_P3_RATE in self._data):
+                        return await self.async_step_power_rates()
+            else:
+                # Market pricing - energy rates are optional, skip if not needed
+                return await self.async_step_power_rates()
+
         schema_dict: dict[str, Any] = {}
 
         if pricing_model == PRICING_MODEL_FIXED:
@@ -564,6 +595,10 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data.update(user_input)
             return await self.async_step_solar_features()
         
+        # Skip if values came from API (auto-configured)
+        if self._auto_configured and (CONF_POWER_P1_RATE in self._data and CONF_POWER_P2_RATE in self._data):
+            return await self.async_step_solar_features()
+        
         # Use values from self._data if available (from auto-config)
         power_p1_rate_default = self._data.get(CONF_POWER_P1_RATE)
         power_p2_rate_default = self._data.get(CONF_POWER_P2_RATE)
@@ -598,9 +633,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data.pop(CONF_SOLAR_SURPLUS_RATE, None)
             return await self.async_step_discount_programs()
         
+        # Skip if surplus_rate came from API (auto-configured) and > 0
+        surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
+        if self._auto_configured and surplus_rate_value is not None and float(surplus_rate_value) > 0:
+            # Value came from API, skip form and proceed
+            return await self.async_step_discount_programs()
+        
         # Check if surplus_rate is already set (from auto-config) and > 0
         # If yes, automatically set has_solar=True and use the rate
-        surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
         has_solar_default = surplus_rate_value is not None and float(surplus_rate_value) > 0
         solar_surplus_rate_default = self._data.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
 
@@ -662,7 +702,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle other concepts configuration (optional)."""
         if user_input is not None:
             if user_input.get("has_other_concepts"):
-                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.046)
             else:
                 # Remove other concepts rate if user unchecks has_other_concepts
                 self._data.pop(CONF_OTHER_CONCEPTS_RATE, None)
@@ -675,7 +715,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("has_other_concepts", default=True): bool,
-                    vol.Optional(CONF_OTHER_CONCEPTS_RATE, default=0.04): vol.Coerce(float),
+                    vol.Optional(CONF_OTHER_CONCEPTS_RATE, default=0.046): vol.Coerce(float),
                 }
             ),
         )
@@ -724,7 +764,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
             return await self.async_step_tariff_name()
         
-        # Use value from self._data if available (from auto-config)
+        # PVPC sensor is set as default, not from API, so always show form
         pvpc_sensor_default = self._data.get(CONF_PVPC_SENSOR, "sensor.pvpc")
 
         return self.async_show_form(
@@ -746,8 +786,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_NAME] = tariff_name
             return self._create_entry()
 
-        # Use value from self._data if available (from auto-config)
+        # Skip if value came from API (auto-configured) - tariff name comes from product.display_name
         tariff_name_default = self._data.get(CONF_NAME, "").strip()
+        if self._auto_configured and tariff_name_default:
+            # Name came from API, skip form and create entry
+            return self._create_entry()
         
         # If not set, generate default name based on pricing model
         if not tariff_name_default:
@@ -1136,7 +1179,7 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntr
         """Handle other concepts configuration (optional)."""
         if user_input is not None:
             if user_input.get("has_other_concepts"):
-                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.046)
             else:
                 # Remove other concepts rate if disabled
                 self._data.pop(CONF_OTHER_CONCEPTS_RATE, None)
@@ -1150,7 +1193,7 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntr
                     vol.Required("has_other_concepts", default=has_other_concepts): bool,
                     vol.Optional(
                         CONF_OTHER_CONCEPTS_RATE,
-                        default=self._data.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+                        default=self._data.get(CONF_OTHER_CONCEPTS_RATE, 0.046)
                     ): vol.Coerce(float),
                 }
             ),
