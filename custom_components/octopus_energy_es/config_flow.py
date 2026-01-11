@@ -33,6 +33,7 @@ from .const import (
     CONF_PVPC_SENSOR,
     CONF_PROPERTY_ID,
     CONF_SOLAR_SURPLUS_RATE,
+    CONF_TARIFF_CONFIG_MODE,
     CONF_TIME_STRUCTURE,
     CONF_VAT_RATE,
     DEFAULT_ELECTRICITY_TAX_RATE,
@@ -156,7 +157,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         prop = properties[0]
                         # Use account number as property_id
                         self._data[CONF_PROPERTY_ID] = prop.get("number") or prop.get("id") or str(prop)
-                        return await self.async_step_pricing_model()
+                        return await self.async_step_tariff_config_mode()
                     else:
                         # Multiple accounts - show selection step
                         return await self.async_step_select_property()
@@ -200,7 +201,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle account selection when multiple accounts are available."""
         if user_input is not None:
             self._data[CONF_PROPERTY_ID] = user_input[CONF_PROPERTY_ID]
-            return await self.async_step_pricing_model()
+            return await self.async_step_tariff_config_mode()
 
         # Build options dict from accounts
         property_options = {}
@@ -229,7 +230,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             account_number = user_input.get(CONF_PROPERTY_ID, "").strip()
             if account_number:
                 self._data[CONF_PROPERTY_ID] = account_number
-                return await self.async_step_pricing_model()
+                return await self.async_step_tariff_config_mode()
             else:
                 errors["base"] = "account_number_required"
 
@@ -241,6 +242,113 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_tariff_config_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle tariff configuration mode selection (auto or manual)."""
+        if user_input is not None:
+            config_mode = user_input.get(CONF_TARIFF_CONFIG_MODE, "manual")
+            self._data[CONF_TARIFF_CONFIG_MODE] = config_mode
+            
+            if config_mode == "auto":
+                # Try to fetch tariff info from API
+                try:
+                    from .api.octopus_client import OctopusClient, OctopusClientError
+                    
+                    email = self._data.get(CONF_EMAIL)
+                    password = self._data.get(CONF_PASSWORD)
+                    property_id = self._data.get(CONF_PROPERTY_ID)
+                    
+                    if not email or not password:
+                        return await self.async_step_pricing_model()
+                    
+                    client = OctopusClient(email, password, property_id)
+                    try:
+                        tariff_info = await client.fetch_tariff_info()
+                        await client.close()
+                        
+                        if tariff_info:
+                            # Auto-configure based on tariff info
+                            product = tariff_info.get("product", {})
+                            prices = product.get("prices", {})
+                            params = product.get("params", {})
+                            
+                            # Determine pricing model and time structure
+                            product_type = params.get("product_type", "").upper()
+                            fixed_type = params.get("fixed_type", "")
+                            
+                            if product_type == "FIXED":
+                                self._pricing_model = PRICING_MODEL_FIXED
+                                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_FIXED
+                                
+                                # Check if single rate or time-of-use
+                                variable_term = prices.get("variable_term", [])
+                                if len(variable_term) == 1:
+                                    self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
+                                    self._data[CONF_FIXED_RATE] = float(variable_term[0])
+                                elif len(variable_term) >= 3:
+                                    self._time_structure = TIME_STRUCTURE_TIME_OF_USE
+                                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_TIME_OF_USE
+                                    self._data[CONF_P1_RATE] = float(variable_term[0])
+                                    self._data[CONF_P2_RATE] = float(variable_term[1])
+                                    self._data[CONF_P3_RATE] = float(variable_term[2])
+                                
+                                # Fixed term (power rates)
+                                fixed_term = prices.get("fixed_term", [])
+                                if len(fixed_term) >= 2:
+                                    self._data[CONF_POWER_P1_RATE] = float(fixed_term[0])
+                                    self._data[CONF_POWER_P2_RATE] = float(fixed_term[1])
+                                
+                                # Solar surplus rate
+                                surplus_rate = prices.get("surplus_rate")
+                                if surplus_rate is not None:
+                                    self._data[CONF_SOLAR_SURPLUS_RATE] = float(surplus_rate)
+                            else:
+                                # Market pricing
+                                self._pricing_model = PRICING_MODEL_MARKET
+                                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_MARKET
+                                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                                self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
+                            
+                            # Store tariff info for sensor
+                            self._data["_tariff_info"] = tariff_info
+                            
+                            # Skip to energy rates step (or further if auto-configured)
+                            return await self.async_step_energy_rates()
+                        else:
+                            # Tariff info not available, fall back to manual
+                            _LOGGER.warning("Could not fetch tariff info, falling back to manual configuration")
+                            return await self.async_step_pricing_model()
+                    except Exception as err:
+                        _LOGGER.warning("Error fetching tariff info: %s", err)
+                        await client.close()
+                        # Fall back to manual configuration
+                        return await self.async_step_pricing_model()
+                except Exception as err:
+                    _LOGGER.error("Error setting up client for tariff info: %s", err)
+                    return await self.async_step_pricing_model()
+            else:
+                # Manual configuration
+                return await self.async_step_pricing_model()
+        
+        return self.async_show_form(
+            step_id="tariff_config_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TARIFF_CONFIG_MODE,
+                        default="auto"
+                    ): vol.In(
+                        {
+                            "auto": "Automatic (from Octopus Energy API)",
+                            "manual": "Manual (configure manually)",
+                        }
+                    )
+                }
+            ),
         )
 
     async def async_step_pricing_model(

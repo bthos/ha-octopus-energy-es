@@ -58,8 +58,7 @@ Supports all Octopus Energy España tariff types:
 
 ### 🔌 Data Sources
 - **Octopus Energy API**: For consumption and billing data (requires credentials)
-- **Primary**: PVPC Hourly Pricing integration ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices (required for market-based tariffs)
-- **Fallback**: OMIE API for wholesale market prices
+- **PVPC Hourly Pricing integration**: ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices (required for market-based tariffs)
 
 > **ℹ️ Note**: 
 > - Octopus Energy España uses a GraphQL API at `https://octopusenergy.es/api/graphql/kraken`. The integration connects to this API for consumption, billing, and account data.
@@ -278,7 +277,6 @@ All timestamps are handled in **Europe/Madrid** timezone (CET/CEST) with automat
 The integration includes robust error handling:
 - Automatic retry logic for API failures
 - Fallback to cached data when APIs are unavailable
-- Fallback from PVPC sensor to OMIE API for market prices
 - Graceful degradation if optional features (consumption, billing) are unavailable
 
 ## 🤝 Compatibility

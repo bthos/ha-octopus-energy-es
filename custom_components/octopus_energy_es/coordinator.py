@@ -11,7 +11,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from zoneinfo import ZoneInfo
 
-from .api.omie_client import OMIEClient
 from .api.octopus_client import OctopusClient, OctopusClientError
 from .const import (
     CONF_PROPERTY_ID,
@@ -53,8 +52,6 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         # PVPC sensor entity ID (default to sensor.pvpc)
         self._pvpc_sensor = config.get(CONF_PVPC_SENSOR, "sensor.pvpc")
 
-        self._omie_client = OMIEClient()
-
         # Octopus API may not be available - credentials are optional
         email = entry.data.get(CONF_EMAIL)  # Credentials stay in data
         password = entry.data.get(CONF_PASSWORD)  # Credentials stay in data
@@ -77,6 +74,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._billing_data: dict[str, Any] = {}
         self._credits_data: dict[str, Any] = {}
         self._account_data: dict[str, Any] = {}
+        # Try to get tariff_info from config entry first (from auto-config)
+        self._tariff_info: dict[str, Any] | None = config.get("_tariff_info")
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
@@ -84,6 +83,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._last_billing_update: date | None = None
         self._last_credits_update: date | None = None
         self._last_account_update: date | None = None
+        self._last_tariff_info_update: date | None = None
         self._first_update_attempted: bool = False
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -273,6 +273,28 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Error updating account info: %s", err)
                 # Account info is optional, don't fail
 
+        # Update tariff info (daily, only if not already set from config)
+        should_update_tariff_info = (
+            self._tariff_info is None
+            and (
+                self._last_tariff_info_update is None
+                or self._last_tariff_info_update < now.date()
+            )
+        )
+        
+        if should_update_tariff_info and self._octopus_client:
+            try:
+                tariff_info = await self._octopus_client.fetch_tariff_info()
+                if tariff_info:
+                    self._tariff_info = tariff_info
+                    self._last_tariff_info_update = now.date()
+                    _LOGGER.debug("Successfully fetched tariff info")
+                else:
+                    _LOGGER.debug("Tariff info not available")
+            except OctopusClientError as err:
+                _LOGGER.debug("Error updating tariff info: %s", err)
+                # Tariff info is optional, don't fail
+
         # Always return a dict, even if empty, so sensors don't fail
         result = {
             "today_prices": self._today_prices or [],
@@ -281,6 +303,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             "billing": self._billing_data or {},
             "credits": self._credits_data or {},
             "account": self._account_data or {},
+            "tariff_info": self._tariff_info,
         }
         
         _LOGGER.debug(
@@ -409,24 +432,15 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             
         except Exception as pvpc_err:
             _LOGGER.warning("PVPC sensor error: %s", pvpc_err)
-            # Try OMIE as fallback
-            try:
-                _LOGGER.debug("Trying OMIE as fallback")
-                market_prices = await self._omie_client.fetch_market_prices(
-                    target_date
-                )
-                _LOGGER.debug("OMIE returned %d price points", len(market_prices))
-            except Exception as fallback_err:
-                _LOGGER.warning("OMIE fallback also failed: %s", fallback_err)
-                # If both fail and we have cached data, use it
-                if target_date is None and self._today_prices:
-                    _LOGGER.info("Using cached today's prices")
-                    return self._today_prices
-                elif target_date and self._tomorrow_prices:
-                    _LOGGER.info("Using cached tomorrow's prices")
-                    return self._tomorrow_prices
-                _LOGGER.error("No price data available and no cache to fall back to")
-                raise
+            # If PVPC fails and we have cached data, use it
+            if target_date is None and self._today_prices:
+                _LOGGER.info("Using cached today's prices")
+                return self._today_prices
+            elif target_date and self._tomorrow_prices:
+                _LOGGER.info("Using cached tomorrow's prices")
+                return self._tomorrow_prices
+            _LOGGER.error("No price data available and no cache to fall back to")
+            raise
 
         if not market_prices:
             # No prices available yet (e.g., tomorrow before 14:00)
@@ -447,7 +461,6 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and close clients."""
-        await self._omie_client.close()
         if self._octopus_client:
             await self._octopus_client.close()
         await super().async_shutdown()

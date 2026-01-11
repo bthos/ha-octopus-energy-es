@@ -31,7 +31,6 @@ def _setup_logging(entry: ConfigEntry) -> None:
         "custom_components.octopus_energy_es.sensor",
         "custom_components.octopus_energy_es.config_flow",
         "custom_components.octopus_energy_es.api.octopus_client",
-        "custom_components.octopus_energy_es.api.omie_client",
         "custom_components.octopus_energy_es.tariff.calculator",
     ]
     

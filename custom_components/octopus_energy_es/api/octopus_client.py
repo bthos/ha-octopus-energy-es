@@ -1,6 +1,7 @@
 """Octopus Energy España API client for consumption and billing data."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -1207,21 +1208,137 @@ class OctopusClient:
             _LOGGER.error("Error fetching credits: %s", err)
             raise OctopusClientError(f"Error fetching credits: {err}") from err
 
-    async def fetch_tariff_info(self) -> dict[str, Any] | None:
+    async def fetch_tariff_info(self, agreement_id: str | None = None) -> dict[str, Any] | None:
         """
-        Fetch tariff information from API if available.
+        Fetch tariff information from API using agreement ID.
 
-        Note: GraphQL API may not have a direct tariff endpoint.
-        This is a placeholder for future implementation.
+        Args:
+            agreement_id: Agreement ID. If None, will try to fetch from properties.
 
         Returns:
-            Dictionary with tariff rates, or None if not available
+            Dictionary with tariff information including prices, product details, etc., or None if not available
         """
-        # TODO: Implement GraphQL query for tariff information
-        # The reference implementation doesn't show tariff queries
-        # This may need to be implemented based on available GraphQL schema
-        _LOGGER.debug("Tariff info fetching not yet implemented for GraphQL API")
-        return None
+        # If agreement_id not provided, try to get it from properties
+        if agreement_id is None:
+            # Try to get agreement ID from properties
+            properties = await self.fetch_properties()
+            if properties and len(properties) > 0:
+                # Get property ID first
+                property_id = await self._fetch_property_id()
+                if property_id:
+                    # Fetch property with agreement info
+                    query = """
+                        query PropertyWithAgreement($propertyId: ID!) {
+                            property(id: $propertyId) {
+                                electricitySupplyPoints {
+                                    activeAgreement {
+                                        id
+                                    }
+                                }
+                            }
+                        }
+                    """
+                    try:
+                        response = await self._execute_graphql_with_retry(
+                            query, {"propertyId": property_id}
+                        )
+                        if "data" in response and "property" in response["data"]:
+                            property_data = response["data"]["property"]
+                            supply_points = property_data.get("electricitySupplyPoints", [])
+                            if supply_points:
+                                active_agreement = supply_points[0].get("activeAgreement")
+                                if active_agreement:
+                                    agreement_id = active_agreement.get("id")
+                    except Exception as err:
+                        _LOGGER.debug("Could not fetch agreement ID from property: %s", err)
+            
+            if not agreement_id:
+                _LOGGER.debug("No agreement ID available for fetching tariff info")
+                return None
+
+        # Fetch agreement details
+        query = """
+            query Agreement($id: ID!) {
+                agreement(id: $id) {
+                    id
+                    validFrom
+                    validTo
+                    product {
+                        displayName
+                        code
+                        prices {
+                            fixedTerm
+                            variableTerm
+                            fixedTermUnits
+                            variableTermUnits
+                            marginTerm
+                            marginTermUnits
+                            marginTermWithTaxes
+                            surplusRate
+                        }
+                        params
+                    }
+                }
+            }
+        """
+        
+        try:
+            response = await self._execute_graphql_with_retry(
+                query, {"id": agreement_id}
+            )
+            
+            if "errors" in response:
+                _LOGGER.error("GraphQL error fetching tariff info: %s", response["errors"])
+                return None
+            
+            if "data" not in response or "agreement" not in response["data"]:
+                _LOGGER.warning("Unexpected response format when fetching tariff info")
+                return None
+            
+            agreement_data = response["data"]["agreement"]
+            if not agreement_data:
+                return None
+            
+            product = agreement_data.get("product", {})
+            prices = product.get("prices", {})
+            
+            # Parse params JSON string
+            params_str = product.get("params", "{}")
+            params: dict[str, Any] = {}
+            if params_str:
+                try:
+                    params = json.loads(params_str)
+                except (json.JSONDecodeError, TypeError, ValueError) as err:
+                    _LOGGER.debug("Could not parse product params '%s': %s", params_str, err)
+            
+            return {
+                "agreement_id": agreement_data.get("id"),
+                "valid_from": agreement_data.get("validFrom"),
+                "valid_to": agreement_data.get("validTo"),
+                "product": {
+                    "display_name": product.get("displayName"),
+                    "code": product.get("code"),
+                    "product_type": params.get("product_type"),
+                    "fixed_type": params.get("fixed_type"),
+                    "prices": {
+                        "fixed_term": prices.get("fixedTerm"),
+                        "variable_term": prices.get("variableTerm"),
+                        "fixed_term_units": prices.get("fixedTermUnits"),
+                        "variable_term_units": prices.get("variableTermUnits"),
+                        "margin_term": prices.get("marginTerm"),
+                        "margin_term_units": prices.get("marginTermUnits"),
+                        "margin_term_with_taxes": prices.get("marginTermWithTaxes"),
+                        "surplus_rate": prices.get("surplusRate"),
+                    },
+                    "params": params,
+                },
+            }
+            
+        except Exception as err:
+            if isinstance(err, OctopusClientError):
+                raise
+            _LOGGER.error("Error fetching tariff info: %s", err)
+            raise OctopusClientError(f"Error fetching tariff info: {err}") from err
 
     async def fetch_properties(self) -> list[dict[str, Any]]:
         """

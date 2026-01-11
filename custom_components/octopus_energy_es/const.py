@@ -10,6 +10,7 @@ CONF_PROPERTY_ID = "property_id"
 CONF_PVPC_SENSOR = "pvpc_sensor"
 CONF_DEBUG = "debug"
 CONF_NAME = "name"
+CONF_TARIFF_CONFIG_MODE = "tariff_config_mode"
 
 # Tariff category configuration keys
 CONF_PRICING_MODEL = "pricing_model"

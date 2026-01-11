@@ -355,6 +355,12 @@ SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=2,
 )
 
+TARIFF_INFO_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="octopus_energy_es_tariff_info",
+    name="Tariff Info",
+    icon="mdi:information-outline",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -394,6 +400,7 @@ async def async_setup_entry(
         ),
         OctopusEnergyESSolarWalletSensor(coordinator, SOLAR_WALLET_SENSOR_DESCRIPTION),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
+        OctopusEnergyESTariffInfoSensor(coordinator, TARIFF_INFO_SENSOR_DESCRIPTION),
     ]
 
     async_add_entities(entities)
@@ -1997,4 +2004,66 @@ class OctopusEnergyESAccountSensor(OctopusEnergyESSensor):
             "tariff": account.get("tariff"),
             "cups": account.get("cups"),
         }
+
+
+class OctopusEnergyESTariffInfoSensor(OctopusEnergyESSensor):
+    """Tariff information sensor."""
+
+    @property
+    def native_value(self) -> str | None:
+        """Return tariff product display name."""
+        if not self._has_data:
+            return None
+            
+        data = self.coordinator.data
+        tariff_info = data.get("tariff_info")
+        
+        if not tariff_info:
+            return None
+        
+        product = tariff_info.get("product", {})
+        return product.get("display_name")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return tariff information attributes."""
+        data = self.coordinator.data
+        tariff_info = data.get("tariff_info")
+        
+        if not tariff_info:
+            return {}
+        
+        product = tariff_info.get("product", {})
+        prices = product.get("prices", {})
+        params = product.get("params", {})
+        
+        attrs: dict[str, Any] = {
+            "agreement_id": tariff_info.get("agreement_id"),
+            "valid_from": tariff_info.get("valid_from"),
+            "valid_to": tariff_info.get("valid_to"),
+            "product_code": product.get("code"),
+            "product_type": product.get("product_type"),
+            "fixed_type": product.get("fixed_type"),
+        }
+        
+        # Add prices
+        if prices.get("fixed_term"):
+            attrs["fixed_term_prices"] = prices.get("fixed_term")
+            attrs["fixed_term_units"] = prices.get("fixed_term_units")
+        if prices.get("variable_term"):
+            attrs["variable_term_prices"] = prices.get("variable_term")
+            attrs["variable_term_units"] = prices.get("variable_term_units")
+        if prices.get("surplus_rate") is not None:
+            attrs["surplus_rate"] = prices.get("surplus_rate")
+        if prices.get("margin_term") is not None:
+            attrs["margin_term"] = prices.get("margin_term")
+            attrs["margin_term_units"] = prices.get("margin_term_units")
+        if prices.get("margin_term_with_taxes") is not None:
+            attrs["margin_term_with_taxes"] = prices.get("margin_term_with_taxes")
+        
+        # Add params
+        if params:
+            attrs["params"] = params
+        
+        return attrs
 

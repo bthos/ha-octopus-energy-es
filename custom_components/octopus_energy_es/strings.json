@@ -37,6 +37,13 @@
           "property_id": "[%key:octopus_energy_es::config::step::manual_account::data::property_id%]"
         }
       },
+      "tariff_config_mode": {
+        "title": "[%key:octopus_energy_es::config::step::tariff_config_mode::title%]",
+        "description": "[%key:octopus_energy_es::config::step::tariff_config_mode::description%]",
+        "data": {
+          "tariff_config_mode": "[%key:octopus_energy_es::config::step::tariff_config_mode::data::tariff_config_mode%]"
+        }
+      },
       "energy_rates": {
         "title": "[%key:octopus_energy_es::config::step::energy_rates::title%]",
         "description": "[%key:octopus_energy_es::config::step::energy_rates::description%]",

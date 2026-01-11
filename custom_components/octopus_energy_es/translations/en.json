@@ -37,6 +37,13 @@
           "property_id": "Account Number"
         }
       },
+      "tariff_config_mode": {
+        "title": "Tariff Configuration",
+        "description": "Choose how you want to configure your tariff:\n\n• **Automatic**: Fetch tariff information from Octopus Energy API (recommended)\n• **Manual**: Configure tariff rates manually",
+        "data": {
+          "tariff_config_mode": "Configuration Mode"
+        }
+      },
       "energy_rates": {
         "title": "Energy Rates",
         "description": "Configure energy consumption rates.\n\n⚠️ Important: Enter all rates as price without taxes. Taxes will be calculated automatically.",
