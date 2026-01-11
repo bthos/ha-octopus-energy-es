@@ -411,6 +411,12 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
+            "name": coordinator._entry.title or "Octopus Energy España",
+            "manufacturer": "Octopus Energy España",
+            "model": coordinator._entry.data.get("pricing_model", "Unknown"),
+        }
 
     @property
     def _has_data(self) -> bool:
