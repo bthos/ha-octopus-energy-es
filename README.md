@@ -60,6 +60,14 @@ Supports all Octopus Energy España tariff types:
 - **Octopus Energy API**: For consumption and billing data (requires credentials)
 - **PVPC Hourly Pricing integration**: ([pvpc_hourly_pricing](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/)) for market prices (required for market-based tariffs)
 
+### 🔄 Tariff Comparison
+- Compare multiple tariffs side-by-side
+- Calculate costs based on your actual consumption patterns
+- Visual breakdown by P1/P2/P3 periods
+- Identify the most economical tariff
+- Calculate potential savings
+- Available via Lovelace card and Home Assistant services
+
 > **ℹ️ Note**: 
 > - Octopus Energy España uses a GraphQL API at `https://octopusenergy.es/api/graphql/kraken`. The integration connects to this API for consumption, billing, and account data.
 > - **PVPC Hourly Pricing integration is required only for market-based tariffs.** For fixed tariffs, you can configure rates manually without PVPC.
@@ -286,6 +294,107 @@ The sensor provides data in the required format:
 - `attributes.tomorrow`: Tomorrow's prices only
 - `attributes.price_00h` through `attributes.price_23h`: Individual hour prices
 
+## 📊 Frontend Lovelace Card
+
+The integration includes a custom Lovelace card for displaying consumption graphs and tariff comparisons.
+
+### Installation
+
+**For HACS installation:**
+1. After installing the integration via HACS, register the card resource:
+   - Go to **Settings → Dashboards → Resources**
+   - Click **Add Resource**
+   - Enter: `/hacsfiles/octopus_energy_es/octopus-consumption-card.bundle.js`
+   - Type: **JavaScript Module**
+   - Click **Create**
+2. Restart Home Assistant
+
+**For manual installation:**
+1. Build the frontend components:
+   ```bash
+   cd custom_components/octopus_energy_es/frontend
+   npm install
+   npm run build
+   ```
+2. Copy the built file to your www directory:
+   ```bash
+   mkdir -p www/community/octopus_energy_es
+   cp dist/octopus-consumption-card.bundle.js www/community/octopus_energy_es/
+   ```
+3. Register the resource: `/local/community/octopus_energy_es/octopus-consumption-card.bundle.js`
+
+### Card Configuration
+
+```yaml
+type: custom:octopus-consumption-card
+entity: sensor.octopus_energy_es_daily_consumption
+title: "Explora tu consumo"
+show_comparison: true
+default_period: "week"  # "day", "week", "month"
+chart_type: "line"  # "line", "bar"
+show_tariff_comparison: true
+tariff_entry_ids:
+  - "entry_id_1"
+  - "entry_id_2"
+show_cost_on_chart: true
+selected_tariff_for_cost: "entry_id_1"
+show_navigation: true
+```
+
+### Card Options
+
+- `entity` (required): Consumption sensor entity ID
+- `title` (optional): Card title
+- `show_comparison` (optional): Show period comparison section
+- `default_period` (optional): Default period ("day", "week", "month")
+- `chart_type` (optional): Chart type ("line", "bar")
+- `show_tariff_comparison` (optional): Show tariff comparison section
+- `tariff_entry_ids` (optional): List of tariff entry IDs to compare
+- `show_cost_on_chart` (optional): Show cost on consumption chart
+- `selected_tariff_for_cost` (optional): Tariff entry ID to use for cost display
+- `show_navigation` (optional): Show period navigation controls
+
+### Features
+
+- **Consumption Visualization**: Display consumption data for day/week/month periods
+- **Period Navigation**: Navigate between periods with Previous/Next buttons
+- **Tariff Comparison**: Compare multiple tariffs side-by-side with cost breakdown
+- **Period Breakdown**: Visual breakdown of consumption by P1/P2/P3 periods for each tariff
+- **Cost Analysis**: Detailed cost breakdown including energy, power, management fees, and taxes
+- **Best Tariff Highlighting**: Automatically highlights the most economical tariff
+- **Savings Calculation**: Shows potential savings when switching to the best tariff
+
+### Tariff Comparison Services
+
+The integration provides services for comparing tariffs programmatically:
+
+**Service: `octopus_energy_es.compare_tariffs`**
+```yaml
+service: octopus_energy_es.compare_tariffs
+data:
+  tariff_entry_ids:
+    - "entry_id_1"
+    - "entry_id_2"
+  source_entry_id: "entry_id_1"  # Optional, defaults to first tariff
+  period: "daily"  # "daily", "weekly", "monthly", "custom"
+  start_date: "2024-01-01"  # Required for custom period
+  end_date: "2024-01-31"  # Required for custom period
+  power_kw: 5.5  # Optional, power value in kW
+```
+
+**Service: `octopus_energy_es.fetch_consumption`**
+```yaml
+service: octopus_energy_es.fetch_consumption
+data:
+  entry_id: "entry_id"
+  start_date: "2024-01-01"  # Optional
+  end_date: "2024-01-31"  # Optional
+  granularity: "hourly"  # "hourly", "daily", "monthly"
+  apply_tariffs:  # Optional, calculate costs for specified tariffs
+    - "entry_id_1"
+    - "entry_id_2"
+```
+
 ## 🔄 Data Updates
 
 - **📅 Today's Prices**: Updated every hour
@@ -322,6 +431,18 @@ The sensor provides data in the required format:
 - Check that your account number was detected correctly
 - Ensure your account has consumption data available
 - ⏰ Consumption data may take some time to appear after initial setup
+
+### 🎨 Frontend Card Not Appearing
+
+- Verify the card resource is registered in Lovelace Resources
+- Check browser console for errors
+- Clear browser cache and reload
+- Verify the file exists:
+  - HACS: `/config/www/community/octopus_energy_es/octopus-consumption-card.bundle.js`
+  - Manual: `/config/www/community/octopus_energy_es/octopus-consumption-card.bundle.js`
+- Ensure you're using the correct resource path:
+  - HACS: `/hacsfiles/octopus_energy_es/octopus-consumption-card.bundle.js`
+  - Manual: `/local/community/octopus_energy_es/octopus-consumption-card.bundle.js`
 
 ### 🔒 Configuration Issues
 

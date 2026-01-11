@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import CONF_DEBUG, DOMAIN
 from .coordinator import OctopusEnergyESCoordinator
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ def _setup_logging(entry: ConfigEntry) -> None:
         "custom_components.octopus_energy_es.config_flow",
         "custom_components.octopus_energy_es.api.octopus_client",
         "custom_components.octopus_energy_es.tariff.calculator",
+        "custom_components.octopus_energy_es.comparison.manager",
+        "custom_components.octopus_energy_es.comparison.calculator",
+        "custom_components.octopus_energy_es.services",
     ]
     
     for logger_name in logger_names:
@@ -43,6 +47,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Octopus Energy España from a config entry."""
     # Set up logging level based on configuration
     _setup_logging(entry)
+    
+    # Set up services (only once)
+    if DOMAIN not in hass.data:
+        await async_setup_services(hass)
     
     coordinator = OctopusEnergyESCoordinator(hass, entry)
     

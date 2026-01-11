@@ -66,3 +66,9 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+
+# Frontend build artifacts (but keep www/ for HACS)
+custom_components/octopus_energy_es/frontend/node_modules/
+custom_components/octopus_energy_es/frontend/dist/
+# Keep www/ directory for HACS frontend resources
+# www/
