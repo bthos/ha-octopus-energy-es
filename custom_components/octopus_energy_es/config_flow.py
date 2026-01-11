@@ -267,22 +267,44 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._pricing_model = PRICING_MODEL_FIXED
                 self._data[CONF_PRICING_MODEL] = PRICING_MODEL_FIXED
                 
-                # Check if single rate or time-of-use
+                # Check fixed_type from params to determine time structure
+                fixed_type = params.get("fixed_type", "")
                 variable_term = prices.get("variable_term", [])
-                if len(variable_term) == 1:
+                
+                # Use fixed_type if available, otherwise fall back to variable_term length
+                if fixed_type == "SinglePeriod":
                     self._time_structure = TIME_STRUCTURE_SINGLE_RATE
                     self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
-                    self._data[CONF_FIXED_RATE] = float(variable_term[0])
-                elif len(variable_term) >= 3:
+                    if len(variable_term) >= 1:
+                        self._data[CONF_FIXED_RATE] = float(variable_term[0])
+                    else:
+                        _LOGGER.warning("Invalid variable_term length for SinglePeriod: %d", len(variable_term))
+                        return False
+                elif fixed_type == "TimeOfUse" or len(variable_term) >= 3:
                     self._time_structure = TIME_STRUCTURE_TIME_OF_USE
                     self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_TIME_OF_USE
-                    self._data[CONF_P1_RATE] = float(variable_term[0])
-                    self._data[CONF_P2_RATE] = float(variable_term[1])
-                    self._data[CONF_P3_RATE] = float(variable_term[2])
+                    if len(variable_term) >= 3:
+                        self._data[CONF_P1_RATE] = float(variable_term[0])
+                        self._data[CONF_P2_RATE] = float(variable_term[1])
+                        self._data[CONF_P3_RATE] = float(variable_term[2])
+                    else:
+                        _LOGGER.warning("Invalid variable_term length for TimeOfUse: %d", len(variable_term))
+                        return False
                 else:
-                    # Invalid variable_term length
-                    _LOGGER.warning("Invalid variable_term length: %d", len(variable_term))
-                    return False
+                    # Fallback: determine by variable_term length
+                    if len(variable_term) == 1:
+                        self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                        self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
+                        self._data[CONF_FIXED_RATE] = float(variable_term[0])
+                    elif len(variable_term) >= 3:
+                        self._time_structure = TIME_STRUCTURE_TIME_OF_USE
+                        self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_TIME_OF_USE
+                        self._data[CONF_P1_RATE] = float(variable_term[0])
+                        self._data[CONF_P2_RATE] = float(variable_term[1])
+                        self._data[CONF_P3_RATE] = float(variable_term[2])
+                    else:
+                        _LOGGER.warning("Invalid variable_term length: %d", len(variable_term))
+                        return False
                 
                 # Fixed term (power rates)
                 fixed_term = prices.get("fixed_term", [])
@@ -290,9 +312,9 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._data[CONF_POWER_P1_RATE] = float(fixed_term[0])
                     self._data[CONF_POWER_P2_RATE] = float(fixed_term[1])
                 
-                # Solar surplus rate (optional)
+                # Solar surplus rate (optional) - only set if > 0
                 surplus_rate = prices.get("surplus_rate")
-                if surplus_rate is not None:
+                if surplus_rate is not None and float(surplus_rate) > 0:
                     self._data[CONF_SOLAR_SURPLUS_RATE] = float(surplus_rate)
                     
             elif product_type == "MARKET" or product_type == "":
@@ -388,12 +410,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             if mapping_success:
                                 # All required data mapped successfully
                                 self._auto_configured = True
-                                # Skip to appropriate step based on pricing model
-                                pricing_model = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-                                if pricing_model == PRICING_MODEL_MARKET:
-                                    return await self.async_step_pvpc_sensor()
-                                else:
-                                    return await self.async_step_tariff_name()
+                                # Always show solar_features, discount_programs, other_concepts, and taxes forms
+                                return await self.async_step_solar_features()
                             else:
                                 # Partial mapping - continue with manual configuration for missing fields
                                 _LOGGER.info("Partial tariff info mapping, continuing with manual configuration for missing fields")
@@ -587,9 +605,10 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data.pop(CONF_SOLAR_SURPLUS_RATE, None)
             return await self.async_step_discount_programs()
         
-        # Check if surplus_rate is already set (from auto-config)
+        # Check if surplus_rate is already set (from auto-config) and > 0
         # If yes, automatically set has_solar=True and use the rate
-        has_solar_default = CONF_SOLAR_SURPLUS_RATE in self._data
+        surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
+        has_solar_default = surplus_rate_value is not None and float(surplus_rate_value) > 0
         solar_surplus_rate_default = self._data.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
 
         return self.async_show_form(
