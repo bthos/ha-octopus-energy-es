@@ -27,6 +27,9 @@ from .const import (
     CONF_DISCOUNT_START_HOUR,
     CONF_MANAGEMENT_FEE_MONTHLY,
     CONF_OTHER_CONCEPTS_RATE,
+    CONF_PRICING_MODEL,
+    CONF_PVPC_SENSOR,
+    CONF_SOLAR_SURPLUS_RATE,
     DOMAIN,
     PRICING_MODEL_FIXED,
     PRICING_MODEL_MARKET,
@@ -370,11 +373,12 @@ async def async_setup_entry(
     """Set up Octopus Energy España sensors."""
     coordinator: OctopusEnergyESCoordinator = hass.data[DOMAIN][entry.entry_id]
 
+    # Get merged config (options override data)
+    config = {**entry.data, **entry.options}
+
+    # Always create these sensors
     entities: list[SensorEntity] = [
         OctopusEnergyESPriceSensor(coordinator, PRICE_SENSOR_DESCRIPTION),
-        OctopusEnergyESCurrentPriceSensor(coordinator, CURRENT_PRICE_SENSOR_DESCRIPTION),
-        OctopusEnergyESMinPriceSensor(coordinator, MIN_PRICE_SENSOR_DESCRIPTION),
-        OctopusEnergyESMaxPriceSensor(coordinator, MAX_PRICE_SENSOR_DESCRIPTION),
         OctopusEnergyESCheapestHourSensor(coordinator, CHEAPEST_HOUR_SENSOR_DESCRIPTION),
         OctopusEnergyESDailyConsumptionSensor(
             coordinator, DAILY_CONSUMPTION_SENSOR_DESCRIPTION
@@ -392,16 +396,26 @@ async def async_setup_entry(
         OctopusEnergyESLastInvoiceSensor(coordinator, LAST_INVOICE_SENSOR_DESCRIPTION),
         OctopusEnergyESNextInvoiceEstimatedSensor(coordinator, NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION),
         OctopusEnergyESBillingPeriodSensor(coordinator, BILLING_PERIOD_SENSOR_DESCRIPTION),
-        OctopusEnergyESCreditsSensor(
-            coordinator, CREDITS_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESCreditsEstimatedSensor(
-            coordinator, CREDITS_ESTIMATED_SENSOR_DESCRIPTION
-        ),
-        OctopusEnergyESSolarWalletSensor(coordinator, SOLAR_WALLET_SENSOR_DESCRIPTION),
         OctopusEnergyESAccountSensor(coordinator, ACCOUNT_SENSOR_DESCRIPTION),
         OctopusEnergyESTariffInfoSensor(coordinator, TARIFF_INFO_SENSOR_DESCRIPTION),
     ]
+
+    # Conditionally create Current/Min/Max Price sensors (only for market pricing with PVPC sensor)
+    pricing_model = config.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+    pvpc_sensor = config.get(CONF_PVPC_SENSOR)
+    if pricing_model == PRICING_MODEL_MARKET and pvpc_sensor:
+        entities.append(OctopusEnergyESCurrentPriceSensor(coordinator, CURRENT_PRICE_SENSOR_DESCRIPTION))
+        entities.append(OctopusEnergyESMinPriceSensor(coordinator, MIN_PRICE_SENSOR_DESCRIPTION))
+        entities.append(OctopusEnergyESMaxPriceSensor(coordinator, MAX_PRICE_SENSOR_DESCRIPTION))
+
+    # Conditionally create Credits sensors (only if discount programs are configured)
+    if CONF_DISCOUNT_PERCENTAGE in config:
+        entities.append(OctopusEnergyESCreditsSensor(coordinator, CREDITS_SENSOR_DESCRIPTION))
+        entities.append(OctopusEnergyESCreditsEstimatedSensor(coordinator, CREDITS_ESTIMATED_SENSOR_DESCRIPTION))
+
+    # Conditionally create Solar Wallet sensor (only if solar surplus rate is configured)
+    if CONF_SOLAR_SURPLUS_RATE in config:
+        entities.append(OctopusEnergyESSolarWalletSensor(coordinator, SOLAR_WALLET_SENSOR_DESCRIPTION))
 
     async_add_entities(entities)
 
