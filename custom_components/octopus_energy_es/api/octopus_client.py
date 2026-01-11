@@ -1464,7 +1464,7 @@ class OctopusClient:
                 "email": email,
                 "mobile": mobile,
                 "address": address_str,
-                "tariff": None,  # Tariff not available from API, use config entry instead
+                "tariff_type": None,  # Tariff type not available from API, use config entry instead
                 "cups": cups,
             }
             

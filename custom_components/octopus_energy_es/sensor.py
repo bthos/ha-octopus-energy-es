@@ -360,7 +360,7 @@ SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 TARIFF_INFO_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_tariff_info",
-    name="Tariff Info",
+    name="Tariff",
     icon="mdi:information-outline",
 )
 
@@ -2015,7 +2015,7 @@ class OctopusEnergyESAccountSensor(OctopusEnergyESSensor):
             "email": account.get("email"),
             "mobile": account.get("mobile"),
             "address": account.get("address"),
-            "tariff": account.get("tariff"),
+            "tariff_type": account.get("tariff_type"),
             "cups": account.get("cups"),
         }
 
@@ -2052,7 +2052,7 @@ class OctopusEnergyESTariffInfoSensor(OctopusEnergyESSensor):
         params = product.get("params", {})
         
         attrs: dict[str, Any] = {
-            "agreement_id": tariff_info.get("agreement_id"),
+            "agreement_id": str(tariff_info.get("agreement_id")) if tariff_info.get("agreement_id") is not None else None,
             "valid_from": tariff_info.get("valid_from"),
             "valid_to": tariff_info.get("valid_to"),
             "product_code": product.get("code"),
@@ -2062,10 +2062,12 @@ class OctopusEnergyESTariffInfoSensor(OctopusEnergyESSensor):
         
         # Add prices
         if prices.get("fixed_term"):
-            attrs["fixed_term_prices"] = prices.get("fixed_term")
+            fixed_term = prices.get("fixed_term")
+            attrs["fixed_term_prices"] = [str(price) for price in fixed_term] if isinstance(fixed_term, list) else str(fixed_term)
             attrs["fixed_term_units"] = prices.get("fixed_term_units")
         if prices.get("variable_term"):
-            attrs["variable_term_prices"] = prices.get("variable_term")
+            variable_term = prices.get("variable_term")
+            attrs["variable_term_prices"] = [str(price) for price in variable_term] if isinstance(variable_term, list) else str(variable_term)
             attrs["variable_term_units"] = prices.get("variable_term_units")
         if prices.get("surplus_rate") is not None:
             attrs["surplus_rate"] = prices.get("surplus_rate")

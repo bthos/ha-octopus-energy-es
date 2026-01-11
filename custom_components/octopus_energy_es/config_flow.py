@@ -582,19 +582,22 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get("has_solar"):
                 self._data[CONF_SOLAR_SURPLUS_RATE] = user_input.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
+            else:
+                # Remove solar surplus rate if user unchecks has_solar
+                self._data.pop(CONF_SOLAR_SURPLUS_RATE, None)
             return await self.async_step_discount_programs()
         
-        # Check if data is already filled (from auto-config)
-        if CONF_SOLAR_SURPLUS_RATE in self._data:
-            # Data already filled, skip to next step
-            return await self.async_step_discount_programs()
+        # Check if surplus_rate is already set (from auto-config)
+        # If yes, automatically set has_solar=True and use the rate
+        has_solar_default = CONF_SOLAR_SURPLUS_RATE in self._data
+        solar_surplus_rate_default = self._data.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
 
         return self.async_show_form(
             step_id="solar_features",
             data_schema=vol.Schema(
                 {
-                    vol.Required("has_solar", default=False): bool,
-                    vol.Optional(CONF_SOLAR_SURPLUS_RATE, default=0.04): vol.Coerce(float),
+                    vol.Required("has_solar", default=has_solar_default): bool,
+                    vol.Optional(CONF_SOLAR_SURPLUS_RATE, default=solar_surplus_rate_default): vol.Coerce(float),
                 }
             ),
             description_placeholders={
@@ -614,14 +617,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_DISCOUNT_START_HOUR] = user_input.get(CONF_DISCOUNT_START_HOUR)
                 self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
                 self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
+            else:
+                # Remove discount data if user unchecks has_discount
+                self._data.pop(CONF_DISCOUNT_START_HOUR, None)
+                self._data.pop(CONF_DISCOUNT_END_HOUR, None)
+                self._data.pop(CONF_DISCOUNT_PERCENTAGE, None)
             return await self.async_step_other_concepts()
         
-        # Check if data is already filled (from auto-config)
-        if (CONF_DISCOUNT_START_HOUR in self._data and 
-            CONF_DISCOUNT_END_HOUR in self._data and 
-            CONF_DISCOUNT_PERCENTAGE in self._data):
-            # Data already filled, skip to next step
-            return await self.async_step_other_concepts()
+        # Always show form for discount programs (this info is not in API)
 
         return self.async_show_form(
             step_id="discount_programs",
@@ -648,12 +651,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get("has_other_concepts"):
                 self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+            else:
+                # Remove other concepts rate if user unchecks has_other_concepts
+                self._data.pop(CONF_OTHER_CONCEPTS_RATE, None)
             return await self.async_step_taxes()
         
-        # Check if data is already filled (from auto-config)
-        if CONF_OTHER_CONCEPTS_RATE in self._data:
-            # Data already filled, skip to next step
-            return await self.async_step_taxes()
+        # Always show form for other concepts (this info is not in API)
 
         return self.async_show_form(
             step_id="other_concepts",
@@ -681,16 +684,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Fixed pricing - skip PVPC sensor and go to tariff name
                 return await self.async_step_tariff_name()
         
-        # Check if data is already filled (from auto-config or defaults)
-        # Taxes are always set to defaults in _map_tariff_info_to_config, so we can skip
-        if (CONF_ELECTRICITY_TAX_RATE in self._data and 
-            CONF_VAT_RATE in self._data):
-            # Data already filled, skip to next step
-            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-            if pricing_model == PRICING_MODEL_MARKET:
-                return await self.async_step_pvpc_sensor()
-            else:
-                return await self.async_step_tariff_name()
+        # Always show form for taxes (user should confirm or adjust default values)
 
         return self.async_show_form(
             step_id="taxes",
@@ -737,6 +731,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             tariff_name = user_input.get(CONF_NAME, "").strip()
             if tariff_name:
                 self._data[CONF_NAME] = tariff_name
+            return self._create_entry()
+
+        # Check if name is already set (e.g., from auto-config)
+        tariff_name = self._data.get(CONF_NAME, "").strip()
+        if tariff_name:
+            # Name already set, skip form and create entry
             return self._create_entry()
 
         # Generate default name based on pricing model

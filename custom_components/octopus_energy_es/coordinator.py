@@ -251,7 +251,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             try:
                 account_info = await self._octopus_client.fetch_account_info()
                 if account_info:
-                    # Add tariff from config entry since it's not available from API
+                    # Add tariff_type from config entry since it's not available from API
                     # Get tariff info from category-based structure
                     config = {**self._entry.data, **self._entry.options}
                     pricing_model = config.get("pricing_model")
@@ -261,7 +261,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                         tariff_display = f"{pricing_model.title()}"
                         if time_structure:
                             tariff_display += f" - {time_structure.replace('_', ' ').title()}"
-                        account_info["tariff"] = tariff_display
+                        account_info["tariff_type"] = tariff_display
                     self._account_data = account_info
                     self._last_account_update = now.date()
             except OctopusClientError as err:
