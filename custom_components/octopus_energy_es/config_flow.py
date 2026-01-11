@@ -652,6 +652,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         # Check if surplus_rate is already set (from auto-config) and > 0
         # If yes, automatically set has_solar=True and use the rate
+        surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
         has_solar_default = surplus_rate_value is not None and float(surplus_rate_value) > 0
         solar_surplus_rate_default = self._data.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
 
