@@ -85,7 +85,7 @@
         "title": "Otros Conceptos",
         "description": "Configure otros conceptos si aplica. Esto puede incluir Bono Social, Alquiler de Equipos, etc.",
         "data": {
-          "has_other_concepts": "¿Tiene otros conceptos?",
+          "has_other_concepts": "¿Tiene otros conceptos en su factura?",
           "other_concepts_rate": "Tarifa Total de Otros Conceptos (€/día, sin impuestos)"
         }
       },

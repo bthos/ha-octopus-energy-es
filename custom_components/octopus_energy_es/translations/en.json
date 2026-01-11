@@ -85,7 +85,7 @@
         "title": "Other concepts",
         "description": "Configure other concepts if applicable. This may include Bono Social, Equipment Rental, etc.",
         "data": {
-          "has_other_concepts": "Do you have other concepts?",
+          "has_other_concepts": "Do you have other concepts in your invoice?",
           "other_concepts_rate": "Total Other Concepts Rate (€/day, without taxes)"
         }
       },
