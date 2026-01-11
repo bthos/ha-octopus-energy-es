@@ -62,6 +62,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pricing_model: str | None = None
         self._time_structure: str | None = None
         self._properties: list[dict[str, Any]] = []
+        self._auto_configured: bool = False
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -244,6 +245,117 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    def _map_tariff_info_to_config(self, tariff_info: dict[str, Any]) -> bool:
+        """
+        Map tariff info from API to config flow parameters.
+        
+        Args:
+            tariff_info: Tariff information dictionary from API
+            
+        Returns:
+            True if all required data was successfully mapped, False otherwise
+        """
+        try:
+            product = tariff_info.get("product", {})
+            prices = product.get("prices", {})
+            params = product.get("params", {})
+            
+            # Determine pricing model and time structure
+            product_type = params.get("product_type", "").upper()
+            
+            if product_type == "FIXED":
+                self._pricing_model = PRICING_MODEL_FIXED
+                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_FIXED
+                
+                # Check if single rate or time-of-use
+                variable_term = prices.get("variable_term", [])
+                if len(variable_term) == 1:
+                    self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
+                    self._data[CONF_FIXED_RATE] = float(variable_term[0])
+                elif len(variable_term) >= 3:
+                    self._time_structure = TIME_STRUCTURE_TIME_OF_USE
+                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_TIME_OF_USE
+                    self._data[CONF_P1_RATE] = float(variable_term[0])
+                    self._data[CONF_P2_RATE] = float(variable_term[1])
+                    self._data[CONF_P3_RATE] = float(variable_term[2])
+                else:
+                    # Invalid variable_term length
+                    _LOGGER.warning("Invalid variable_term length: %d", len(variable_term))
+                    return False
+                
+                # Fixed term (power rates)
+                fixed_term = prices.get("fixed_term", [])
+                if len(fixed_term) >= 2:
+                    self._data[CONF_POWER_P1_RATE] = float(fixed_term[0])
+                    self._data[CONF_POWER_P2_RATE] = float(fixed_term[1])
+                
+                # Solar surplus rate (optional)
+                surplus_rate = prices.get("surplus_rate")
+                if surplus_rate is not None:
+                    self._data[CONF_SOLAR_SURPLUS_RATE] = float(surplus_rate)
+                    
+            elif product_type == "MARKET" or product_type == "":
+                # Market pricing or unknown type defaults to market
+                self._pricing_model = PRICING_MODEL_MARKET
+                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_MARKET
+                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
+            else:
+                _LOGGER.warning("Unknown product_type: %s", product_type)
+                return False
+            
+            # Tariff name from product display name
+            display_name = product.get("display_name")
+            if display_name:
+                self._data[CONF_NAME] = display_name
+            
+            # Store tariff info for sensor
+            self._data["_tariff_info"] = tariff_info
+            
+            # Check if all required fields are present
+            pricing_model = self._data.get(CONF_PRICING_MODEL)
+            time_structure = self._data.get(CONF_TIME_STRUCTURE)
+            
+            if pricing_model == PRICING_MODEL_FIXED:
+                # For fixed pricing, we need energy rates and power rates
+                if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                    has_energy_rate = CONF_FIXED_RATE in self._data
+                else:
+                    has_energy_rate = (
+                        CONF_P1_RATE in self._data and
+                        CONF_P2_RATE in self._data and
+                        CONF_P3_RATE in self._data
+                    )
+                has_power_rates = (
+                    CONF_POWER_P1_RATE in self._data and
+                    CONF_POWER_P2_RATE in self._data
+                )
+                
+                if not has_energy_rate or not has_power_rates:
+                    _LOGGER.debug("Missing required fields for fixed pricing: energy_rate=%s, power_rates=%s", 
+                                 has_energy_rate, has_power_rates)
+                    return False
+            else:
+                # For market pricing, no required rates (uses PVPC sensor)
+                pass
+            
+            # Set default tax rates if not present
+            if CONF_ELECTRICITY_TAX_RATE not in self._data:
+                self._data[CONF_ELECTRICITY_TAX_RATE] = DEFAULT_ELECTRICITY_TAX_RATE
+            if CONF_VAT_RATE not in self._data:
+                self._data[CONF_VAT_RATE] = DEFAULT_VAT_RATE
+            
+            # Set default PVPC sensor for market pricing
+            if pricing_model == PRICING_MODEL_MARKET and CONF_PVPC_SENSOR not in self._data:
+                self._data[CONF_PVPC_SENSOR] = "sensor.pvpc"
+            
+            return True
+            
+        except Exception as err:
+            _LOGGER.error("Error mapping tariff info to config: %s", err, exc_info=True)
+            return False
+
     async def async_step_tariff_config_mode(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -270,54 +382,22 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         await client.close()
                         
                         if tariff_info:
-                            # Auto-configure based on tariff info
-                            product = tariff_info.get("product", {})
-                            prices = product.get("prices", {})
-                            params = product.get("params", {})
+                            # Map tariff info to config
+                            mapping_success = self._map_tariff_info_to_config(tariff_info)
                             
-                            # Determine pricing model and time structure
-                            product_type = params.get("product_type", "").upper()
-                            fixed_type = params.get("fixed_type", "")
-                            
-                            if product_type == "FIXED":
-                                self._pricing_model = PRICING_MODEL_FIXED
-                                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_FIXED
-                                
-                                # Check if single rate or time-of-use
-                                variable_term = prices.get("variable_term", [])
-                                if len(variable_term) == 1:
-                                    self._time_structure = TIME_STRUCTURE_SINGLE_RATE
-                                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
-                                    self._data[CONF_FIXED_RATE] = float(variable_term[0])
-                                elif len(variable_term) >= 3:
-                                    self._time_structure = TIME_STRUCTURE_TIME_OF_USE
-                                    self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_TIME_OF_USE
-                                    self._data[CONF_P1_RATE] = float(variable_term[0])
-                                    self._data[CONF_P2_RATE] = float(variable_term[1])
-                                    self._data[CONF_P3_RATE] = float(variable_term[2])
-                                
-                                # Fixed term (power rates)
-                                fixed_term = prices.get("fixed_term", [])
-                                if len(fixed_term) >= 2:
-                                    self._data[CONF_POWER_P1_RATE] = float(fixed_term[0])
-                                    self._data[CONF_POWER_P2_RATE] = float(fixed_term[1])
-                                
-                                # Solar surplus rate
-                                surplus_rate = prices.get("surplus_rate")
-                                if surplus_rate is not None:
-                                    self._data[CONF_SOLAR_SURPLUS_RATE] = float(surplus_rate)
+                            if mapping_success:
+                                # All required data mapped successfully
+                                self._auto_configured = True
+                                # Skip to appropriate step based on pricing model
+                                pricing_model = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+                                if pricing_model == PRICING_MODEL_MARKET:
+                                    return await self.async_step_pvpc_sensor()
+                                else:
+                                    return await self.async_step_tariff_name()
                             else:
-                                # Market pricing
-                                self._pricing_model = PRICING_MODEL_MARKET
-                                self._data[CONF_PRICING_MODEL] = PRICING_MODEL_MARKET
-                                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
-                                self._data[CONF_TIME_STRUCTURE] = TIME_STRUCTURE_SINGLE_RATE
-                            
-                            # Store tariff info for sensor
-                            self._data["_tariff_info"] = tariff_info
-                            
-                            # Skip to energy rates step (or further if auto-configured)
-                            return await self.async_step_energy_rates()
+                                # Partial mapping - continue with manual configuration for missing fields
+                                _LOGGER.info("Partial tariff info mapping, continuing with manual configuration for missing fields")
+                                return await self.async_step_energy_rates()
                         else:
                             # Tariff info not available, fall back to manual
                             _LOGGER.warning("Could not fetch tariff info, falling back to manual configuration")
@@ -423,6 +503,24 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+        
+        # Check if data is already filled (from auto-config)
+        if pricing_model == PRICING_MODEL_FIXED:
+            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                if CONF_FIXED_RATE in self._data:
+                    # Data already filled, skip to next step
+                    return await self.async_step_power_rates()
+            elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
+                if (CONF_P1_RATE in self._data and 
+                    CONF_P2_RATE in self._data and 
+                    CONF_P3_RATE in self._data):
+                    # Data already filled, skip to next step
+                    return await self.async_step_power_rates()
+        else:
+            # Market pricing - energy rates are optional (management fee)
+            # If management fee is set or not needed, skip
+            if CONF_MANAGEMENT_FEE_MONTHLY in self._data:
+                return await self.async_step_power_rates()
 
         schema_dict: dict[str, Any] = {}
 
@@ -452,6 +550,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_solar_features()
+        
+        # Check if data is already filled (from auto-config)
+        if (CONF_POWER_P1_RATE in self._data and 
+            CONF_POWER_P2_RATE in self._data):
+            # Data already filled, skip to next step
+            return await self.async_step_solar_features()
 
         return self.async_show_form(
             step_id="power_rates",
@@ -478,6 +582,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get("has_solar"):
                 self._data[CONF_SOLAR_SURPLUS_RATE] = user_input.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
+            return await self.async_step_discount_programs()
+        
+        # Check if data is already filled (from auto-config)
+        if CONF_SOLAR_SURPLUS_RATE in self._data:
+            # Data already filled, skip to next step
             return await self.async_step_discount_programs()
 
         return self.async_show_form(
@@ -506,6 +615,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
                 self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
             return await self.async_step_other_concepts()
+        
+        # Check if data is already filled (from auto-config)
+        if (CONF_DISCOUNT_START_HOUR in self._data and 
+            CONF_DISCOUNT_END_HOUR in self._data and 
+            CONF_DISCOUNT_PERCENTAGE in self._data):
+            # Data already filled, skip to next step
+            return await self.async_step_other_concepts()
 
         return self.async_show_form(
             step_id="discount_programs",
@@ -533,6 +649,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input.get("has_other_concepts"):
                 self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
             return await self.async_step_taxes()
+        
+        # Check if data is already filled (from auto-config)
+        if CONF_OTHER_CONCEPTS_RATE in self._data:
+            # Data already filled, skip to next step
+            return await self.async_step_taxes()
 
         return self.async_show_form(
             step_id="other_concepts",
@@ -559,6 +680,17 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 # Fixed pricing - skip PVPC sensor and go to tariff name
                 return await self.async_step_tariff_name()
+        
+        # Check if data is already filled (from auto-config or defaults)
+        # Taxes are always set to defaults in _map_tariff_info_to_config, so we can skip
+        if (CONF_ELECTRICITY_TAX_RATE in self._data and 
+            CONF_VAT_RATE in self._data):
+            # Data already filled, skip to next step
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            if pricing_model == PRICING_MODEL_MARKET:
+                return await self.async_step_pvpc_sensor()
+            else:
+                return await self.async_step_tariff_name()
 
         return self.async_show_form(
             step_id="taxes",
@@ -581,6 +713,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
+            return await self.async_step_tariff_name()
+        
+        # Check if data is already filled (from auto-config)
+        if CONF_PVPC_SENSOR in self._data:
+            # Data already filled, skip to next step
             return await self.async_step_tariff_name()
 
         return self.async_show_form(
@@ -874,6 +1011,12 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntr
 
         if user_input is not None:
             self._data.update(user_input)
+            return await self.async_step_solar_features()
+        
+        # Check if data is already filled (from auto-config)
+        if (CONF_POWER_P1_RATE in self._data and 
+            CONF_POWER_P2_RATE in self._data):
+            # Data already filled, skip to next step
             return await self.async_step_solar_features()
 
         return self.async_show_form(
