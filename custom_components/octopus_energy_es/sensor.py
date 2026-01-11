@@ -474,7 +474,7 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         # Check if any of the main data sources have actual data (not empty lists/dicts)
         has_prices = bool(data.get("today_prices") or data.get("tomorrow_prices"))
-        has_consumption = bool(data.get("consumption"))
+        has_consumption = bool(data.get("consumption_hourly") or data.get("consumption_daily"))
         has_billing = bool(data.get("billing") and isinstance(data.get("billing"), dict) and data.get("billing"))
         has_credits = bool(data.get("credits") and isinstance(data.get("credits"), dict) and data.get("credits"))
         has_account = bool(data.get("account") and isinstance(data.get("account"), dict) and data.get("account"))
@@ -667,7 +667,7 @@ class OctopusEnergyESDailyConsumptionSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_hourly", [])  # Use hourly data for daily consumption with hourly breakdown
 
         if not consumption:
             self._consumption_date = None
@@ -773,7 +773,7 @@ class OctopusEnergyESMonthlyConsumptionSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_daily", [])  # Use daily data for monthly consumption
 
         if not consumption:
             self._consumption_month = None
@@ -936,7 +936,7 @@ class OctopusEnergyESWeeklyConsumptionSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_daily", [])  # Use daily data for weekly consumption
 
         if not consumption:
             self._consumption_week_start = None
@@ -1082,7 +1082,7 @@ class OctopusEnergyESYearlyConsumptionSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_daily", [])  # Use daily data for yearly consumption
 
         if not consumption:
             self._consumption_year = None
@@ -1219,7 +1219,7 @@ class OctopusEnergyESDailyCostSensor(OctopusEnergyESSensor):
             
         data = self.coordinator.data
         prices = data.get("today_prices", [])
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_hourly", [])  # Use hourly data for accurate cost calculation
 
         if not prices or not consumption:
             self._cost_date = None
@@ -1497,7 +1497,7 @@ class OctopusEnergyESNextInvoiceEstimatedSensor(OctopusEnergyESSensor):
             
         data = self.coordinator.data
         billing = data.get("billing", {})
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_daily", [])  # Use daily data for next invoice estimation
         prices = data.get("today_prices", [])
         tomorrow_prices = data.get("tomorrow_prices", [])
 
@@ -1879,7 +1879,7 @@ class OctopusEnergyESCreditsEstimatedSensor(OctopusEnergyESSensor):
             return None
             
         data = self.coordinator.data
-        consumption = data.get("consumption", [])
+        consumption = data.get("consumption_hourly", [])  # Use hourly data for credits calculation by hour
         prices = data.get("today_prices", []) or data.get("tomorrow_prices", [])
 
         if not consumption:

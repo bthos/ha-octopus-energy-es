@@ -70,7 +70,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         # Data storage
         self._today_prices: list[dict[str, Any]] = []
         self._tomorrow_prices: list[dict[str, Any]] = []
-        self._consumption_data: list[dict[str, Any]] = []
+        self._consumption_data_hourly: list[dict[str, Any]] = []  # Hourly data for Daily Consumption, Daily Cost, Credits Estimated
+        self._consumption_data_daily: list[dict[str, Any]] = []  # Daily data for Weekly, Monthly, Yearly Consumption
         self._billing_data: dict[str, Any] = {}
         self._credits_data: dict[str, Any] = {}
         self._account_data: dict[str, Any] = {}
@@ -82,7 +83,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
-        self._last_consumption_update: date | None = None
+        self._last_consumption_hourly_update: date | None = None
+        self._last_consumption_daily_update: date | None = None
         self._last_billing_update: date | None = None
         self._last_credits_update: date | None = None
         self._last_account_update: date | None = None
@@ -151,30 +153,37 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning("Error updating tomorrow's prices: %s", err)
                 # Don't fail if tomorrow's prices aren't available yet
 
-        # Update consumption data (daily)
+        # Update consumption data with different granularities
         # Note: Octopus Energy España API may not be publicly available
-        should_update_consumption = (
-            self._last_consumption_update is None
-            or self._last_consumption_update < now.date()
+        
+        # Update hourly consumption data (for Daily Consumption, Daily Cost, Credits Estimated)
+        # Only need last 3 days for hourly breakdown
+        should_update_consumption_hourly = (
+            self._last_consumption_hourly_update is None
+            or self._last_consumption_hourly_update < now.date()
         )
         
-        if should_update_consumption and self._octopus_client:
+        if should_update_consumption_hourly and self._octopus_client:
             try:
-                consumption_result = await self._octopus_client.fetch_consumption(
+                end_date = now.date()
+                start_date = end_date - timedelta(days=3)  # Only 3 days for hourly data
+                consumption_hourly_result = await self._octopus_client.fetch_consumption(
+                    start_date=start_date,
+                    end_date=end_date,
                     granularity="hourly"
                 )
-                self._consumption_data = consumption_result or []
-                self._last_consumption_update = now.date()
-                if consumption_result:
+                self._consumption_data_hourly = consumption_hourly_result or []
+                self._last_consumption_hourly_update = now.date()
+                if consumption_hourly_result:
                     _LOGGER.debug(
-                        "Fetched %d consumption measurements",
-                        len(consumption_result)
+                        "Fetched %d hourly consumption measurements (last 3 days)",
+                        len(consumption_hourly_result)
                     )
                 else:
-                    _LOGGER.debug("No consumption data returned from API")
+                    _LOGGER.debug("No hourly consumption data returned from API")
             except OctopusClientError as err:
                 error_msg = str(err).lower()
-                self._consumption_data = []  # Reset on error
+                self._consumption_data_hourly = []  # Reset on error
                 if "not available" in error_msg or "not be publicly" in error_msg:
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
@@ -183,16 +192,60 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     )
                 else:
                     _LOGGER.warning(
-                        "Error updating consumption data: %s. "
+                        "Error updating hourly consumption data: %s. "
                         "Consumption sensors will show as Unknown.",
                         err
                     )
                 # Consumption is optional, don't fail
             except Exception as err:
-                self._consumption_data = []  # Reset on unexpected error
+                self._consumption_data_hourly = []  # Reset on unexpected error
                 _LOGGER.warning(
-                    "Unexpected error updating consumption data: %s. "
+                    "Unexpected error updating hourly consumption data: %s. "
                     "Consumption sensors will show as Unknown.",
+                    err,
+                    exc_info=True
+                )
+        
+        # Update daily consumption data (for Weekly, Monthly, Yearly Consumption)
+        # Need data from start of year for Yearly sensor
+        should_update_consumption_daily = (
+            self._last_consumption_daily_update is None
+            or self._last_consumption_daily_update < now.date()
+        )
+        
+        if should_update_consumption_daily and self._octopus_client:
+            try:
+                end_date = now.date()
+                start_date = date(end_date.year, 1, 1)  # From start of year
+                consumption_daily_result = await self._octopus_client.fetch_consumption(
+                    start_date=start_date,
+                    end_date=end_date,
+                    granularity="daily"
+                )
+                self._consumption_data_daily = consumption_daily_result or []
+                self._last_consumption_daily_update = now.date()
+                if consumption_daily_result:
+                    _LOGGER.debug(
+                        "Fetched %d daily consumption measurements (from start of year)",
+                        len(consumption_daily_result)
+                    )
+                else:
+                    _LOGGER.debug("No daily consumption data returned from API")
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                self._consumption_data_daily = []  # Reset on error
+                if "not available" not in error_msg and "not be publicly" not in error_msg:
+                    _LOGGER.warning(
+                        "Error updating daily consumption data: %s. "
+                        "Weekly/Monthly/Yearly consumption sensors will show as Unknown.",
+                        err
+                    )
+                # Consumption is optional, don't fail
+            except Exception as err:
+                self._consumption_data_daily = []  # Reset on unexpected error
+                _LOGGER.warning(
+                    "Unexpected error updating daily consumption data: %s. "
+                    "Weekly/Monthly/Yearly consumption sensors will show as Unknown.",
                     err,
                     exc_info=True
                 )
@@ -301,7 +354,10 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         result = {
             "today_prices": self._today_prices or [],
             "tomorrow_prices": self._tomorrow_prices or [],
-            "consumption": self._consumption_data or [],
+            "consumption_hourly": self._consumption_data_hourly or [],
+            "consumption_daily": self._consumption_data_daily or [],
+            # For backward compatibility, also include hourly as default consumption
+            "consumption": self._consumption_data_hourly or [],
             "billing": self._billing_data or {},
             "credits": self._credits_data or {},
             "account": self._account_data or {},

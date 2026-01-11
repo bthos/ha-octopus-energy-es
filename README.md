@@ -96,7 +96,7 @@ Supports all Octopus Energy España tariff types:
 
 ## ⚙️ Configuration
 
-The configuration flow guides you through setting up your tariff using a category-based approach:
+The configuration flow guides you through setting up your tariff. You can choose between **automatic** (recommended) or **manual** configuration:
 
 ### Step 1: Octopus Energy Credentials (Required)
 
@@ -106,19 +106,27 @@ Enter your Octopus Energy España account credentials:
 
 > **💡 Note**: Your account number will be automatically detected after authentication. If you have multiple accounts, you'll be able to select which one to use.
 
-### Step 2: Pricing Model
+### Step 2: Tariff Configuration Mode
+
+Choose how you want to configure your tariff:
+- **🔄 Automatic** (Recommended): Fetch tariff information from Octopus Energy API. The integration will automatically detect your tariff type, rates, and configuration. Forms will only be shown for fields that couldn't be fetched from the API.
+- **✏️ Manual**: Configure tariff rates manually step by step.
+
+> **💡 Note**: If you choose automatic configuration, the integration will fetch your tariff details from the API and pre-fill all available information. You'll only need to confirm or adjust settings that aren't available in the API (like discount programs and other concepts).
+
+### Step 3: Pricing Model
 
 Choose your pricing model:
 - **📈 Market**: Prices vary based on the electricity market (requires PVPC sensor)
 - **🔒 Fixed**: Fixed price per kWh regardless of market fluctuations
 
-### Step 3: Time Structure (Fixed pricing only)
+### Step 4: Time Structure (Fixed pricing only)
 
 If you selected Fixed pricing, choose your time structure:
 - **⚡ Single Rate**: Same price throughout the day
 - **⏰ Time-of-Use**: Different prices for different periods (P1/P2/P3)
 
-### Step 4: Energy Rates Configuration
+### Step 5: Energy Rates Configuration
 
 **For Market pricing:**
 - No rates needed (uses market prices from PVPC sensor)
@@ -133,35 +141,72 @@ If you selected Fixed pricing, choose your time structure:
 
 **Default time-of-use periods (weekdays):**
 - **P1 (Peak)**: 11:00-14:00 & 19:00-22:00
-- **P2 (Flat)**: 09:00-10:00, 15:00-18:00, 23:00
+- **P2 (Flat)**: 09:00-10:00, 15:00-18:00, 23:00-00:00
 - **P3 (Base)**: 00:00-08:00
 - **Weekends/Holidays**: All hours are P3 (Base)
 
-### Step 5: Power Rates (Optional)
+### Step 6: Power Rates (Optional)
 
 Configure power (potencia) rates:
 - **Power P1 Rate**: Peak period power rate (€/kW/day)
 - **Power P2 Rate**: Base period power rate (€/kW/day)
 
-### Step 6: Solar Features (Optional)
+### Step 7: Solar Features (Optional)
 
 If you have solar panels:
 - **Solar Surplus Rate**: Compensation rate for surplus energy (€/kWh)
 
-### Step 7: Discount Programs (Optional)
+> **💡 Note**: If using automatic configuration and your tariff includes solar surplus rate from the API, this step will be automatically skipped.
+
+### Step 8: Discount Programs (Optional)
 
 Configure discount hours:
 - **Discount Start Hour**: Start hour for discount period (0-23)
 - **Discount End Hour**: End hour for discount period (0-23)
 - **Discount Percentage**: Discount percentage (0-100%)
 
-### Step 8: PVPC Sensor Selection (Market pricing only)
+### Step 9: Other Concepts (Optional)
+
+Configure other concepts that may appear in your invoice:
+- **Other Concepts Rate**: Total rate for other concepts like Bono Social, Equipment Rental, etc. (€/day, without taxes)
+
+### Step 10: Taxes
+
+Configure tax rates:
+- **Electricity Tax Rate**: Standard Spanish electricity tax (default: 5.11%)
+- **VAT Rate**: Standard Spanish VAT (default: 21%)
+
+> **💡 Note**: Default values are pre-filled based on standard Spanish tax rates.
+
+### Step 11: PVPC Sensor Selection (Market pricing only)
 
 If you selected Market pricing, select the PVPC Hourly Pricing sensor:
 - **Default**: `sensor.pvpc` (if you haven't changed the sensor name)
 - **Custom**: Enter your custom PVPC sensor entity ID if you renamed it
 
 > **💡 Note**: Fixed pricing tariffs skip this step as they don't require market price data.
+
+### Step 12: Tariff Name
+
+Enter a name for this tariff configuration. This name will be used to identify the integration instance in Home Assistant.
+
+> **💡 Note**: If using automatic configuration, the tariff name will be pre-filled from the API (product display name).
+
+## 🔧 Modifying Configuration
+
+After initial setup, you can modify your configuration at any time:
+1. Go to **Settings → Devices & Services**
+2. Find your **Octopus Energy España** integration
+3. Click on it and select **Configure**
+4. You can modify any settings including:
+   - Tariff name
+   - Pricing model and rates
+   - Solar features
+   - Discount programs
+   - Other concepts
+   - Taxes
+   - PVPC sensor (for market pricing)
+   - DEBUG logging
 
 ## 📊 Sensors
 
@@ -203,7 +248,28 @@ If you selected Market pricing, select the PVPC Hourly Pricing sensor:
 
 - `sensor.octopus_energy_es_account`: Account information
   - **State**: Account ID
-  - **Attributes**: `name`, `email`, `mobile`, `address`, `tariff`, `cups`
+  - **Attributes**: `name`, `email`, `mobile`, `address`, `tariff_type`, `cups`
+
+### 📋 Tariff Sensor
+
+- `sensor.octopus_energy_es_tariff`: Tariff information from Octopus Energy API
+  - **State**: Product display name (e.g., "Octopus SUN CLUB")
+  - **Attributes**: 
+    - `agreement_id`: Agreement ID (as string)
+    - `valid_from`: Agreement start date
+    - `valid_to`: Agreement end date
+    - `product_code`: Product code
+    - `product_type`: Product type (FIXED, MARKET, etc.)
+    - `fixed_type`: Fixed type (SinglePeriod, TimeOfUse)
+    - `fixed_term_prices`: Fixed term prices (as strings)
+    - `fixed_term_units`: Fixed term units
+    - `variable_term_prices`: Variable term prices (as strings)
+    - `variable_term_units`: Variable term units
+    - `surplus_rate`: Solar surplus rate (if applicable)
+    - `margin_term`: Margin term (if applicable)
+    - `params`: Additional product parameters
+
+> **💡 Note**: This sensor is automatically populated when using automatic tariff configuration or when tariff info is available from the API.
 
 ## 🎨 Usage with price-timeline-card
 
@@ -228,6 +294,7 @@ The sensor provides data in the required format:
 - **🧾 Billing Data**: Updated daily
 - **💰 Credits Data**: Updated daily
 - **👤 Account Data**: Updated daily
+- **📋 Tariff Info**: Updated daily (if available from API)
 
 ## 🔧 Troubleshooting
 
@@ -262,6 +329,8 @@ The sensor provides data in the required format:
 - Verify that time-of-use periods cover all 24 hours for weekdays
 - Check that discount hours are valid (0-23) if discount program is configured
 - Ensure power rates are configured if you want power cost calculations
+- If automatic configuration fails, try manual configuration as a fallback
+- Check Home Assistant logs for detailed error messages (enable DEBUG logging in integration settings if needed)
 
 ## 📚 Dependencies
 
@@ -285,6 +354,8 @@ The integration includes robust error handling:
 - Compatible with `ha_epex_spot` format
 - Works with ApexCharts and other visualization tools
 - Supports Home Assistant 2023.1.0 and later
+- Automatic tariff configuration via Octopus Energy GraphQL API
+- Options flow for modifying configuration after initial setup
 
 ## 💬 Support
 
