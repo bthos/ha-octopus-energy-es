@@ -544,14 +544,15 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return OctopusEnergyESOptionsFlowHandler()
+        return OctopusEnergyESOptionsFlowHandler(config_entry)
 
 
-class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
+class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
     """Handle options flow for Octopus Energy España."""
 
-    def __init__(self) -> None:
+    def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
+        super().__init__(config_entry)
         self._data: dict[str, Any] = {}
         self._pricing_model: str | None = None
         self._time_structure: str | None = None
