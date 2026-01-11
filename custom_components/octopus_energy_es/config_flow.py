@@ -633,10 +633,11 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data.pop(CONF_SOLAR_SURPLUS_RATE, None)
             return await self.async_step_discount_programs()
         
-        # Skip if surplus_rate came from API (auto-configured) and > 0
+        # Skip if surplus_rate came from API (auto-configured)
         surplus_rate_value = self._data.get(CONF_SOLAR_SURPLUS_RATE)
-        if self._auto_configured and surplus_rate_value is not None and float(surplus_rate_value) > 0:
-            # Value came from API, skip form and proceed
+        if self._auto_configured and surplus_rate_value is not None:
+            # Value came from API, skip form and proceed (whether > 0 or = 0)
+            # If > 0, solar features are enabled; if = 0, they are disabled
             return await self.async_step_discount_programs()
         
         # Check if surplus_rate is already set (from auto-config) and > 0
