@@ -1242,8 +1242,21 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntr
             # Use current entry title if name not provided
             tariff_name = self.config_entry.title
         
+        # Preserve _tariff_info from current entry if not updated (deep copy to avoid reference issues)
+        import copy
+        current_tariff_info = None
+        if "_tariff_info" not in self._data:
+            # Try to get from current entry data or options
+            current_tariff_info = self.config_entry.data.get("_tariff_info") or self.config_entry.options.get("_tariff_info")
+            if current_tariff_info:
+                current_tariff_info = copy.deepcopy(current_tariff_info)
+        
         for key, value in self._data.items():
             if key not in data_keys_to_keep:
                 options_data[key] = value
+        
+        # Preserve _tariff_info if it wasn't updated
+        if current_tariff_info and "_tariff_info" not in options_data:
+            options_data["_tariff_info"] = current_tariff_info
         
         return self.async_create_entry(title=tariff_name, data=options_data)

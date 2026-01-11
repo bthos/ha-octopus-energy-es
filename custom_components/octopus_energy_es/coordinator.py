@@ -75,7 +75,10 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._credits_data: dict[str, Any] = {}
         self._account_data: dict[str, Any] = {}
         # Try to get tariff_info from config entry first (from auto-config)
-        self._tariff_info: dict[str, Any] | None = config.get("_tariff_info")
+        # Check both data and options (options take precedence)
+        self._tariff_info: dict[str, Any] | None = (
+            entry.options.get("_tariff_info") or entry.data.get("_tariff_info")
+        )
 
         # Track last update times
         self._last_tomorrow_update: datetime | None = None
@@ -288,9 +291,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 if tariff_info:
                     self._tariff_info = tariff_info
                     self._last_tariff_info_update = now.date()
-                    _LOGGER.debug("Successfully fetched tariff info")
                 else:
-                    _LOGGER.debug("Tariff info not available")
+                    _LOGGER.debug("Tariff info not available from API")
             except OctopusClientError as err:
                 _LOGGER.debug("Error updating tariff info: %s", err)
                 # Tariff info is optional, don't fail
