@@ -411,11 +411,29 @@ class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator._entry.entry_id}_{description.key}"
+        
+        # Build model string with pricing model and time structure
+        config = {**coordinator._entry.data, **coordinator._entry.options}
+        pricing_model = config.get("pricing_model", "Unknown")
+        time_structure = config.get("time_structure", "")
+        
+        if pricing_model == "fixed":
+            if time_structure == "single_rate":
+                model_str = "Fixed - Single Rate"
+            elif time_structure == "time_of_use":
+                model_str = "Fixed - Time-of-Use"
+            else:
+                model_str = "Fixed"
+        elif pricing_model == "market":
+            model_str = "Market"
+        else:
+            model_str = "Unknown"
+        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator._entry.entry_id)},
             "name": coordinator._entry.title or "Octopus Energy España",
             "manufacturer": "Octopus Energy España",
-            "model": coordinator._entry.data.get("pricing_model", "Unknown"),
+            "model": model_str,
         }
 
     @property
