@@ -96,6 +96,13 @@
         "data": {
           "pvpc_sensor": "ID de Entidad del Sensor PVPC"
         }
+      },
+      "integration_settings": {
+        "title": "Configuración de la Integración",
+        "description": "Configure la configuración de la integración.\n\n{debug_info}",
+        "data": {
+          "debug": "Habilitar registro DEBUG"
+        }
       }
     },
     "error": {

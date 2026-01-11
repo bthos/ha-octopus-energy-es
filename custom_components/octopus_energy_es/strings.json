@@ -96,6 +96,13 @@
         "data": {
           "pvpc_sensor": "[%key:octopus_energy_es::config::step::pvpc_sensor::data::pvpc_sensor%]"
         }
+      },
+      "integration_settings": {
+        "title": "[%key:octopus_energy_es::config::step::integration_settings::title%]",
+        "description": "[%key:octopus_energy_es::config::step::integration_settings::description%]",
+        "data": {
+          "debug": "[%key:octopus_energy_es::config::step::integration_settings::data::debug%]"
+        }
       }
     },
     "error": {

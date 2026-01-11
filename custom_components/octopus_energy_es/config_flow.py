@@ -12,6 +12,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.config_entries import ConfigEntry
 
 from .const import (
+    CONF_DEBUG,
     CONF_DISCOUNT_END_HOUR,
     CONF_DISCOUNT_PERCENTAGE,
     CONF_DISCOUNT_START_HOUR,
@@ -821,8 +822,8 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
             if pricing_model == PRICING_MODEL_MARKET:
                 return await self.async_step_pvpc_sensor()
             else:
-                # Fixed pricing - skip PVPC sensor and save options
-                return self._save_options()
+                # Fixed pricing - skip PVPC sensor and go to integration settings
+                return await self.async_step_integration_settings()
 
         return self.async_show_form(
             step_id="taxes",
@@ -851,7 +852,7 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
-            return self._save_options()
+            return await self.async_step_integration_settings()
 
         return self.async_show_form(
             step_id="pvpc_sensor",
@@ -863,6 +864,33 @@ class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
                     ): str,
                 }
             ),
+        )
+
+    async def async_step_integration_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle integration settings (debug logging)."""
+        if user_input is not None:
+            self._data[CONF_DEBUG] = user_input.get(CONF_DEBUG, False)
+            return self._save_options()
+
+        return self.async_show_form(
+            step_id="integration_settings",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_DEBUG,
+                        default=self._data.get(CONF_DEBUG, False)
+                    ): bool,
+                }
+            ),
+            description_placeholders={
+                "debug_info": (
+                    "Enable DEBUG logging for detailed information about "
+                    "API calls, price calculations, and data updates. "
+                    "Useful for troubleshooting issues."
+                ),
+            },
         )
 
     def _save_options(self) -> FlowResult:

@@ -96,6 +96,13 @@
         "data": {
           "pvpc_sensor": "Ідэнтыфікатар сутнасці датчыка PVPC"
         }
+      },
+      "integration_settings": {
+        "title": "Налады інтэграцыі",
+        "description": "Наладзьце налады інтэграцыі.\n\n{debug_info}",
+        "data": {
+          "debug": "Уключыць DEBUG-рэгістраванне"
+        }
       }
     },
     "error": {

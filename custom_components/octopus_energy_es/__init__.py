@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import CONF_DEBUG, DOMAIN
 from .coordinator import OctopusEnergyESCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,8 +15,36 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
+def _setup_logging(entry: ConfigEntry) -> None:
+    """Set up logging level based on configuration."""
+    # Get merged config (options override data)
+    config = {**entry.data, **entry.options}
+    debug_enabled = config.get(CONF_DEBUG, False)
+    
+    # Set logging level for all module loggers
+    log_level = logging.DEBUG if debug_enabled else logging.INFO
+    
+    # Update loggers for all modules in this integration
+    logger_names = [
+        "custom_components.octopus_energy_es",
+        "custom_components.octopus_energy_es.coordinator",
+        "custom_components.octopus_energy_es.sensor",
+        "custom_components.octopus_energy_es.config_flow",
+        "custom_components.octopus_energy_es.api.octopus_client",
+        "custom_components.octopus_energy_es.api.omie_client",
+        "custom_components.octopus_energy_es.tariff.calculator",
+    ]
+    
+    for logger_name in logger_names:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(log_level)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Octopus Energy España from a config entry."""
+    # Set up logging level based on configuration
+    _setup_logging(entry)
+    
     coordinator = OctopusEnergyESCoordinator(hass, entry)
     
     # Try to refresh data, but don't fail if it doesn't work initially
@@ -39,6 +67,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry when options are updated."""
+    # Update logging level before reload
+    _setup_logging(entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
