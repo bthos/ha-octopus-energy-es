@@ -410,8 +410,8 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             if mapping_success:
                                 # All required data mapped successfully
                                 self._auto_configured = True
-                                # Always show solar_features, discount_programs, other_concepts, and taxes forms
-                                return await self.async_step_solar_features()
+                                # Start from pricing_model to show forms with pre-filled values
+                                return await self.async_step_pricing_model()
                             else:
                                 # Partial mapping - continue with manual configuration for missing fields
                                 _LOGGER.info("Partial tariff info mapping, continuing with manual configuration for missing fields")
@@ -465,11 +465,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_TIME_STRUCTURE] = self._time_structure
                 return await self.async_step_energy_rates()
 
+        # Use value from self._data if available (from auto-config)
+        pricing_model_default = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        
         return self.async_show_form(
             step_id="pricing_model",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_PRICING_MODEL): vol.In(
+                    vol.Required(CONF_PRICING_MODEL, default=pricing_model_default): vol.In(
                         {
                             PRICING_MODEL_FIXED: "Fixed (Fixed rates for 12 months)",
                             PRICING_MODEL_MARKET: "Market (Variable market-based pricing)",
@@ -488,11 +491,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_TIME_STRUCTURE] = self._time_structure
             return await self.async_step_energy_rates()
 
+        # Use value from self._data if available (from auto-config)
+        time_structure_default = self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+        
         return self.async_show_form(
             step_id="time_structure",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_TIME_STRUCTURE): vol.In(
+                    vol.Required(CONF_TIME_STRUCTURE, default=time_structure_default): vol.In(
                         {
                             TIME_STRUCTURE_SINGLE_RATE: "Single Rate (Same price 24h)",
                             TIME_STRUCTURE_TIME_OF_USE: "Time-of-Use (P1/P2/P3 periods)",
@@ -521,37 +527,26 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
         time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
-        
-        # Check if data is already filled (from auto-config)
-        if pricing_model == PRICING_MODEL_FIXED:
-            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
-                if CONF_FIXED_RATE in self._data:
-                    # Data already filled, skip to next step
-                    return await self.async_step_power_rates()
-            elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
-                if (CONF_P1_RATE in self._data and 
-                    CONF_P2_RATE in self._data and 
-                    CONF_P3_RATE in self._data):
-                    # Data already filled, skip to next step
-                    return await self.async_step_power_rates()
-        else:
-            # Market pricing - energy rates are optional (management fee)
-            # If management fee is set or not needed, skip
-            if CONF_MANAGEMENT_FEE_MONTHLY in self._data:
-                return await self.async_step_power_rates()
 
         schema_dict: dict[str, Any] = {}
 
         if pricing_model == PRICING_MODEL_FIXED:
             if time_structure == TIME_STRUCTURE_SINGLE_RATE:
-                schema_dict[vol.Required(CONF_FIXED_RATE)] = vol.Coerce(float)
+                # Use value from self._data if available (from auto-config)
+                fixed_rate_default = self._data.get(CONF_FIXED_RATE)
+                schema_dict[vol.Required(CONF_FIXED_RATE, default=fixed_rate_default)] = vol.Coerce(float)
             elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
-                schema_dict[vol.Required(CONF_P1_RATE)] = vol.Coerce(float)
-                schema_dict[vol.Required(CONF_P2_RATE)] = vol.Coerce(float)
-                schema_dict[vol.Required(CONF_P3_RATE)] = vol.Coerce(float)
+                # Use values from self._data if available (from auto-config)
+                p1_rate_default = self._data.get(CONF_P1_RATE)
+                p2_rate_default = self._data.get(CONF_P2_RATE)
+                p3_rate_default = self._data.get(CONF_P3_RATE)
+                schema_dict[vol.Required(CONF_P1_RATE, default=p1_rate_default)] = vol.Coerce(float)
+                schema_dict[vol.Required(CONF_P2_RATE, default=p2_rate_default)] = vol.Coerce(float)
+                schema_dict[vol.Required(CONF_P3_RATE, default=p3_rate_default)] = vol.Coerce(float)
         else:
             # Market pricing - optional management fee
-            schema_dict[vol.Optional(CONF_MANAGEMENT_FEE_MONTHLY)] = vol.Coerce(float)
+            management_fee_default = self._data.get(CONF_MANAGEMENT_FEE_MONTHLY)
+            schema_dict[vol.Optional(CONF_MANAGEMENT_FEE_MONTHLY, default=management_fee_default)] = vol.Coerce(float)
 
         return self.async_show_form(
             step_id="energy_rates",
@@ -569,18 +564,16 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data.update(user_input)
             return await self.async_step_solar_features()
         
-        # Check if data is already filled (from auto-config)
-        if (CONF_POWER_P1_RATE in self._data and 
-            CONF_POWER_P2_RATE in self._data):
-            # Data already filled, skip to next step
-            return await self.async_step_solar_features()
+        # Use values from self._data if available (from auto-config)
+        power_p1_rate_default = self._data.get(CONF_POWER_P1_RATE)
+        power_p2_rate_default = self._data.get(CONF_POWER_P2_RATE)
 
         return self.async_show_form(
             step_id="power_rates",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_POWER_P1_RATE): vol.Coerce(float),
-                    vol.Required(CONF_POWER_P2_RATE): vol.Coerce(float),
+                    vol.Required(CONF_POWER_P1_RATE, default=power_p1_rate_default): vol.Coerce(float),
+                    vol.Required(CONF_POWER_P2_RATE, default=power_p2_rate_default): vol.Coerce(float),
                 }
             ),
             description_placeholders={
@@ -704,15 +697,18 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_tariff_name()
         
         # Always show form for taxes (user should confirm or adjust default values)
+        # Use values from self._data if available (from auto-config or defaults)
+        electricity_tax_rate_default = self._data.get(CONF_ELECTRICITY_TAX_RATE, DEFAULT_ELECTRICITY_TAX_RATE)
+        vat_rate_default = self._data.get(CONF_VAT_RATE, DEFAULT_VAT_RATE)
 
         return self.async_show_form(
             step_id="taxes",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_ELECTRICITY_TAX_RATE, default=DEFAULT_ELECTRICITY_TAX_RATE): vol.All(
+                    vol.Optional(CONF_ELECTRICITY_TAX_RATE, default=electricity_tax_rate_default): vol.All(
                         vol.Coerce(float), vol.Range(min=0, max=1)
                     ),
-                    vol.Optional(CONF_VAT_RATE, default=DEFAULT_VAT_RATE): vol.All(
+                    vol.Optional(CONF_VAT_RATE, default=vat_rate_default): vol.All(
                         vol.Coerce(float), vol.Range(min=0, max=1)
                     ),
                 }
@@ -728,16 +724,14 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_PVPC_SENSOR] = pvpc_sensor
             return await self.async_step_tariff_name()
         
-        # Check if data is already filled (from auto-config)
-        if CONF_PVPC_SENSOR in self._data:
-            # Data already filled, skip to next step
-            return await self.async_step_tariff_name()
+        # Use value from self._data if available (from auto-config)
+        pvpc_sensor_default = self._data.get(CONF_PVPC_SENSOR, "sensor.pvpc")
 
         return self.async_show_form(
             step_id="pvpc_sensor",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_PVPC_SENSOR, default="sensor.pvpc"): str,
+                    vol.Optional(CONF_PVPC_SENSOR, default=pvpc_sensor_default): str,
                 }
             ),
         )
@@ -752,29 +746,27 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_NAME] = tariff_name
             return self._create_entry()
 
-        # Check if name is already set (e.g., from auto-config)
-        tariff_name = self._data.get(CONF_NAME, "").strip()
-        if tariff_name:
-            # Name already set, skip form and create entry
-            return self._create_entry()
-
-        # Generate default name based on pricing model
-        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
-        time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+        # Use value from self._data if available (from auto-config)
+        tariff_name_default = self._data.get(CONF_NAME, "").strip()
         
-        if pricing_model == PRICING_MODEL_FIXED:
-            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
-                default_name = "Octopus Relax"
+        # If not set, generate default name based on pricing model
+        if not tariff_name_default:
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+            
+            if pricing_model == PRICING_MODEL_FIXED:
+                if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                    tariff_name_default = "Octopus Relax"
+                else:
+                    tariff_name_default = "Octopus Solar"
             else:
-                default_name = "Octopus Solar"
-        else:
-            default_name = "Octopus Flexi"
+                tariff_name_default = "Octopus Flexi"
 
         return self.async_show_form(
             step_id="tariff_name",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_NAME, default=default_name): str,
+                    vol.Required(CONF_NAME, default=tariff_name_default): str,
                 }
             ),
             description_placeholders={

@@ -361,7 +361,7 @@ SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
 TARIFF_INFO_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_tariff_info",
     name="Tariff",
-    icon="mdi:information-outline",
+    icon="mdi:book-open",
 )
 
 
