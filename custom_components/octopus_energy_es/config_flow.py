@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigEntry
 
 from .const import (
     CONF_DISCOUNT_END_HOUR,
@@ -495,3 +496,384 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             title=f"Octopus Energy España - {model_name}",
             data=self._data,
         )
+
+    @staticmethod
+    async def async_get_options_flow(config_entry: ConfigEntry) -> config_entries.OptionsFlow:
+        """Get the options flow for this handler."""
+        return OctopusEnergyESOptionsFlowHandler(config_entry)
+
+
+class OctopusEnergyESOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Octopus Energy España."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+        self._data: dict[str, Any] = {}
+        self._pricing_model: str | None = None
+        self._time_structure: str | None = None
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        # Load current configuration
+        current_data = self.config_entry.data.copy()
+        current_options = self.config_entry.options.copy()
+        
+        # Merge data and options (options take precedence)
+        self._data = {**current_data, **current_options}
+        
+        # Initialize pricing model and time structure from current config
+        self._pricing_model = self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        self._time_structure = self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+        
+        return await self.async_step_pricing_model()
+
+    async def async_step_pricing_model(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle pricing model selection."""
+        if user_input is not None:
+            new_pricing_model = user_input[CONF_PRICING_MODEL]
+            old_pricing_model = self._pricing_model
+            
+            # If switching pricing models, clear incompatible values
+            if old_pricing_model and old_pricing_model != new_pricing_model:
+                if old_pricing_model == PRICING_MODEL_FIXED:
+                    # Switching from Fixed to Market - remove fixed rates
+                    self._data.pop(CONF_FIXED_RATE, None)
+                    self._data.pop(CONF_P1_RATE, None)
+                    self._data.pop(CONF_P2_RATE, None)
+                    self._data.pop(CONF_P3_RATE, None)
+                else:
+                    # Switching from Market to Fixed - remove management fee
+                    self._data.pop(CONF_MANAGEMENT_FEE_MONTHLY, None)
+            
+            self._pricing_model = new_pricing_model
+            self._data[CONF_PRICING_MODEL] = self._pricing_model
+            
+            if self._pricing_model == PRICING_MODEL_FIXED:
+                return await self.async_step_time_structure()
+            else:
+                # Market pricing - skip time structure step
+                self._time_structure = TIME_STRUCTURE_SINGLE_RATE
+                self._data[CONF_TIME_STRUCTURE] = self._time_structure
+                return await self.async_step_energy_rates()
+
+        return self.async_show_form(
+            step_id="pricing_model",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_PRICING_MODEL,
+                        default=self._pricing_model or PRICING_MODEL_MARKET
+                    ): vol.In(
+                        {
+                            PRICING_MODEL_FIXED: "Fixed (Fixed rates for 12 months)",
+                            PRICING_MODEL_MARKET: "Market (Variable market-based pricing)",
+                        }
+                    )
+                }
+            ),
+        )
+
+    async def async_step_time_structure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle time structure selection (for Fixed pricing)."""
+        if user_input is not None:
+            new_time_structure = user_input[CONF_TIME_STRUCTURE]
+            old_time_structure = self._time_structure
+            
+            # If switching time structures, clear incompatible values
+            if old_time_structure and old_time_structure != new_time_structure:
+                if old_time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                    # Switching from Single Rate to Time-of-Use - remove fixed_rate
+                    self._data.pop(CONF_FIXED_RATE, None)
+                else:
+                    # Switching from Time-of-Use to Single Rate - remove P1/P2/P3 rates
+                    self._data.pop(CONF_P1_RATE, None)
+                    self._data.pop(CONF_P2_RATE, None)
+                    self._data.pop(CONF_P3_RATE, None)
+            
+            self._time_structure = new_time_structure
+            self._data[CONF_TIME_STRUCTURE] = self._time_structure
+            return await self.async_step_energy_rates()
+
+        return self.async_show_form(
+            step_id="time_structure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TIME_STRUCTURE,
+                        default=self._time_structure or TIME_STRUCTURE_SINGLE_RATE
+                    ): vol.In(
+                        {
+                            TIME_STRUCTURE_SINGLE_RATE: "Single Rate (Same price 24h)",
+                            TIME_STRUCTURE_TIME_OF_USE: "Time-of-Use (P1/P2/P3 periods)",
+                        }
+                    )
+                }
+            ),
+            description_placeholders={
+                "period_info": (
+                    "P1 (Punta): 11-14, 19-22 weekdays\n"
+                    "P2 (Llano): 9-10, 15-18, 23 weekdays\n"
+                    "P3 (Valle): 0-8 weekdays, all hours weekends/holidays"
+                ),
+            },
+        )
+
+    async def async_step_energy_rates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle energy rates configuration."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_power_rates()
+
+        pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+        time_structure = self._time_structure or self._data.get(CONF_TIME_STRUCTURE, TIME_STRUCTURE_SINGLE_RATE)
+
+        schema_dict: dict[str, Any] = {}
+
+        if pricing_model == PRICING_MODEL_FIXED:
+            if time_structure == TIME_STRUCTURE_SINGLE_RATE:
+                schema_dict[vol.Required(
+                    CONF_FIXED_RATE,
+                    default=self._data.get(CONF_FIXED_RATE)
+                )] = vol.Coerce(float)
+            elif time_structure == TIME_STRUCTURE_TIME_OF_USE:
+                schema_dict[vol.Required(
+                    CONF_P1_RATE,
+                    default=self._data.get(CONF_P1_RATE)
+                )] = vol.Coerce(float)
+                schema_dict[vol.Required(
+                    CONF_P2_RATE,
+                    default=self._data.get(CONF_P2_RATE)
+                )] = vol.Coerce(float)
+                schema_dict[vol.Required(
+                    CONF_P3_RATE,
+                    default=self._data.get(CONF_P3_RATE)
+                )] = vol.Coerce(float)
+        else:
+            # Market pricing - optional management fee
+            schema_dict[vol.Optional(
+                CONF_MANAGEMENT_FEE_MONTHLY,
+                default=self._data.get(CONF_MANAGEMENT_FEE_MONTHLY)
+            )] = vol.Coerce(float)
+
+        return self.async_show_form(
+            step_id="energy_rates",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
+    async def async_step_power_rates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle power rates configuration (always required)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_solar_features()
+
+        return self.async_show_form(
+            step_id="power_rates",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_POWER_P1_RATE,
+                        default=self._data.get(CONF_POWER_P1_RATE)
+                    ): vol.Coerce(float),
+                    vol.Required(
+                        CONF_POWER_P2_RATE,
+                        default=self._data.get(CONF_POWER_P2_RATE)
+                    ): vol.Coerce(float),
+                }
+            ),
+            description_placeholders={
+                "power_info": (
+                    "Power rates (Potencia) are always time-of-use:\n"
+                    "P1 (Punta): Same hours as energy P1\n"
+                    "P2 (Valle): Combines energy P2 + P3 hours"
+                ),
+            },
+            errors=errors,
+        )
+
+    async def async_step_solar_features(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle solar features configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_solar"):
+                self._data[CONF_SOLAR_SURPLUS_RATE] = user_input.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
+            else:
+                # Remove solar surplus rate if solar is disabled
+                self._data.pop(CONF_SOLAR_SURPLUS_RATE, None)
+            return await self.async_step_discount_programs()
+
+        has_solar = CONF_SOLAR_SURPLUS_RATE in self._data
+        return self.async_show_form(
+            step_id="solar_features",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_solar", default=has_solar): bool,
+                    vol.Optional(
+                        CONF_SOLAR_SURPLUS_RATE,
+                        default=self._data.get(CONF_SOLAR_SURPLUS_RATE, 0.04)
+                    ): vol.Coerce(float),
+                }
+            ),
+            description_placeholders={
+                "solar_info": (
+                    "Solar surplus rate: Compensation rate for surplus energy (€/kWh).\n"
+                    "Solar Wallet balance is retrieved from API automatically."
+                ),
+            },
+        )
+
+    async def async_step_discount_programs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle discount programs configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_discount"):
+                self._data[CONF_DISCOUNT_START_HOUR] = user_input.get(CONF_DISCOUNT_START_HOUR)
+                self._data[CONF_DISCOUNT_END_HOUR] = user_input.get(CONF_DISCOUNT_END_HOUR)
+                self._data[CONF_DISCOUNT_PERCENTAGE] = user_input.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
+            else:
+                # Remove discount settings if discount is disabled
+                self._data.pop(CONF_DISCOUNT_START_HOUR, None)
+                self._data.pop(CONF_DISCOUNT_END_HOUR, None)
+                self._data.pop(CONF_DISCOUNT_PERCENTAGE, None)
+            return await self.async_step_other_concepts()
+
+        has_discount = CONF_DISCOUNT_START_HOUR in self._data
+        return self.async_show_form(
+            step_id="discount_programs",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_discount", default=has_discount): bool,
+                    vol.Optional(
+                        CONF_DISCOUNT_START_HOUR,
+                        default=self._data.get(CONF_DISCOUNT_START_HOUR, 12)
+                    ): vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=23)
+                    ),
+                    vol.Optional(
+                        CONF_DISCOUNT_END_HOUR,
+                        default=self._data.get(CONF_DISCOUNT_END_HOUR, 18)
+                    ): vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=23)
+                    ),
+                    vol.Optional(
+                        CONF_DISCOUNT_PERCENTAGE,
+                        default=self._data.get(CONF_DISCOUNT_PERCENTAGE, 0.45)
+                    ): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_other_concepts(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle other concepts configuration (optional)."""
+        if user_input is not None:
+            if user_input.get("has_other_concepts"):
+                self._data[CONF_OTHER_CONCEPTS_RATE] = user_input.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+            else:
+                # Remove other concepts rate if disabled
+                self._data.pop(CONF_OTHER_CONCEPTS_RATE, None)
+            return await self.async_step_taxes()
+
+        has_other_concepts = CONF_OTHER_CONCEPTS_RATE in self._data
+        return self.async_show_form(
+            step_id="other_concepts",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("has_other_concepts", default=has_other_concepts): bool,
+                    vol.Optional(
+                        CONF_OTHER_CONCEPTS_RATE,
+                        default=self._data.get(CONF_OTHER_CONCEPTS_RATE, 0.04)
+                    ): vol.Coerce(float),
+                }
+            ),
+        )
+
+    async def async_step_taxes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle taxes configuration."""
+        if user_input is not None:
+            self._data[CONF_ELECTRICITY_TAX_RATE] = user_input.get(CONF_ELECTRICITY_TAX_RATE, DEFAULT_ELECTRICITY_TAX_RATE)
+            self._data[CONF_VAT_RATE] = user_input.get(CONF_VAT_RATE, DEFAULT_VAT_RATE)
+            
+            # Check if we need PVPC sensor (only for market pricing)
+            pricing_model = self._pricing_model or self._data.get(CONF_PRICING_MODEL, PRICING_MODEL_MARKET)
+            if pricing_model == PRICING_MODEL_MARKET:
+                return await self.async_step_pvpc_sensor()
+            else:
+                # Fixed pricing - skip PVPC sensor and save options
+                return self._save_options()
+
+        return self.async_show_form(
+            step_id="taxes",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_ELECTRICITY_TAX_RATE,
+                        default=self._data.get(CONF_ELECTRICITY_TAX_RATE, DEFAULT_ELECTRICITY_TAX_RATE)
+                    ): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                    vol.Optional(
+                        CONF_VAT_RATE,
+                        default=self._data.get(CONF_VAT_RATE, DEFAULT_VAT_RATE)
+                    ): vol.All(
+                        vol.Coerce(float), vol.Range(min=0, max=1)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_pvpc_sensor(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle PVPC sensor selection (only for market pricing)."""
+        if user_input is not None:
+            pvpc_sensor = user_input.get(CONF_PVPC_SENSOR, "sensor.pvpc")
+            self._data[CONF_PVPC_SENSOR] = pvpc_sensor
+            return self._save_options()
+
+        return self.async_show_form(
+            step_id="pvpc_sensor",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_PVPC_SENSOR,
+                        default=self._data.get(CONF_PVPC_SENSOR, "sensor.pvpc")
+                    ): str,
+                }
+            ),
+        )
+
+    def _save_options(self) -> FlowResult:
+        """Save the options."""
+        # Separate data that should be in options vs data
+        # Credentials and property_id stay in data, everything else goes to options
+        options_data = {}
+        data_keys_to_keep = {CONF_EMAIL, CONF_PASSWORD, CONF_PROPERTY_ID}
+        
+        for key, value in self._data.items():
+            if key not in data_keys_to_keep:
+                options_data[key] = value
+        
+        return self.async_create_entry(title="", data=options_data)

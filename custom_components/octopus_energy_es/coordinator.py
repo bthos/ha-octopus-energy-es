@@ -47,15 +47,18 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         self._hass = hass
         self._timezone = ZoneInfo(TIMEZONE_MADRID)
 
+        # Get merged config (options override data)
+        config = {**entry.data, **entry.options}
+
         # PVPC sensor entity ID (default to sensor.pvpc)
-        self._pvpc_sensor = entry.data.get(CONF_PVPC_SENSOR, "sensor.pvpc")
+        self._pvpc_sensor = config.get(CONF_PVPC_SENSOR, "sensor.pvpc")
 
         self._omie_client = OMIEClient()
 
         # Octopus API may not be available - credentials are optional
-        email = entry.data.get(CONF_EMAIL)
-        password = entry.data.get(CONF_PASSWORD)
-        property_id = entry.data.get(CONF_PROPERTY_ID, "")
+        email = entry.data.get(CONF_EMAIL)  # Credentials stay in data
+        password = entry.data.get(CONF_PASSWORD)  # Credentials stay in data
+        property_id = entry.data.get(CONF_PROPERTY_ID, "")  # Property ID stays in data
         
         if email and password:
             self._octopus_client = OctopusClient(email, password, property_id)
@@ -63,8 +66,8 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Octopus Energy credentials not provided - using price data only")
             self._octopus_client = None
 
-        # Create tariff calculator
-        tariff_config = create_tariff_config(entry.data)
+        # Create tariff calculator with merged config
+        tariff_config = create_tariff_config(config)
         self._tariff_calculator = TariffCalculator(tariff_config)
 
         # Data storage
@@ -247,8 +250,9 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 if account_info:
                     # Add tariff from config entry since it's not available from API
                     # Get tariff info from category-based structure
-                    pricing_model = self._entry.data.get("pricing_model")
-                    time_structure = self._entry.data.get("time_structure")
+                    config = {**self._entry.data, **self._entry.options}
+                    pricing_model = config.get("pricing_model")
+                    time_structure = config.get("time_structure")
                     
                     if pricing_model:
                         tariff_display = f"{pricing_model.title()}"
@@ -293,8 +297,11 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         """Fetch market prices from PVPC sensor and calculate tariff prices."""
         market_prices: list[dict[str, Any]] = []
         
+        # Get merged config (options override data)
+        config = {**self._entry.data, **self._entry.options}
+        
         # Check if this is a fixed pricing tariff - if so, generate hourly structure directly
-        pricing_model = self._entry.data.get("pricing_model", PRICING_MODEL_MARKET)
+        pricing_model = config.get("pricing_model", PRICING_MODEL_MARKET)
         if pricing_model == PRICING_MODEL_FIXED:
             # For fixed pricing, we don't need market prices - generate hourly structure
             if target_date is None:
