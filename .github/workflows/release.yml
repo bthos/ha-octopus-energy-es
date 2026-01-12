@@ -24,12 +24,62 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-tags: true
 
-      - name: Get version from manifest
+      - name: Get current version from manifest
+        id: get_current_version
+        run: |
+          CURRENT_VERSION=$(python3 -c "import json; f=open('custom_components/octopus_energy_es/manifest.json'); data=json.load(f); print(data['version']); f.close()")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate next version
+        id: calculate_version
+        run: |
+          CURRENT_VERSION="${{ steps.get_current_version.outputs.current_version }}"
+          # Parse version (e.g., 0.4.35 -> 0.4.36)
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR="${VERSION_PARTS[0]}"
+          MINOR="${VERSION_PARTS[1]}"
+          PATCH="${VERSION_PARTS[2]}"
+          
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update version in manifest.json
+        run: |
+          NEW_VERSION="${{ steps.calculate_version.outputs.new_version }}"
+          python3 << EOF
+          import json
+          import re
+          
+          with open('custom_components/octopus_energy_es/manifest.json', 'r') as f:
+              data = json.load(f)
+          
+          data['version'] = "$NEW_VERSION"
+          
+          with open('custom_components/octopus_energy_es/manifest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          EOF
+          echo "Updated manifest.json to version $NEW_VERSION"
+
+      - name: Commit version update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add custom_components/octopus_energy_es/manifest.json
+          git commit -m "Bump version to ${{ steps.calculate_version.outputs.new_version }}" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+
+      - name: Get version for release
         id: get_version
         run: |
-          VERSION=$(python3 -c "import json; f=open('custom_components/octopus_energy_es/manifest.json'); data=json.load(f); print(data['version']); f.close()")
+          VERSION="${{ steps.calculate_version.outputs.new_version }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "Version for release: $VERSION"
 
       - name: Check if tag exists
         id: check_tag
