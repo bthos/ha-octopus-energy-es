@@ -1,7 +1,9 @@
 {
   "domain": "octopus_energy_es",
-  "name": "Octopus Energy España",
-  "codeowners": ["@bthos"],
+  "name": "Octopus Energy Espa\u00f1a",
+  "codeowners": [
+    "@bthos"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/bthos/ha-octopus-energy-es",
@@ -14,6 +16,5 @@
     "lxml>=4.9.0",
     "python-graphql-client>=0.4.3"
   ],
-  "version": "0.4.35"
+  "version": "0.4.36"
 }
-
