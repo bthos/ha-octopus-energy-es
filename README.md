@@ -4,6 +4,8 @@
 
 Home Assistant custom component for Octopus Energy España, providing electricity price sensors, consumption tracking, and billing data integration.
 
+> **📊 Looking for visualization?** Check out the [**Octopus Energy España Consumption Card**](https://github.com/bthos/ha-octopus-energy-es-card) - a Lovelace card for displaying consumption graphs and tariff comparisons!
+
 ## 💝 Support the Developer
 
 **Love this integration?** Help support its development by joining Octopus Energy España!
@@ -68,11 +70,12 @@ Supports all Octopus Energy España tariff types:
 - Calculate potential savings
 - Available via Home Assistant services
 
+> **💡 Tip**: Use the [**Octopus Energy España Consumption Card**](https://github.com/bthos/ha-octopus-energy-es-card) Lovelace plugin to visualize tariff comparisons and consumption data in your dashboard!
+
 > **ℹ️ Note**: 
 > - Octopus Energy España uses a GraphQL API at `https://octopusenergy.es/api/graphql/kraken`. The integration connects to this API for consumption, billing, and account data.
 > - **PVPC Hourly Pricing integration is required only for market-based tariffs.** For fixed tariffs, you can configure rates manually without PVPC.
 > - **Octopus Energy credentials (email/password) are required** to access consumption and billing data.
-> - **For Lovelace card visualization**, install the separate [Octopus Energy España Consumption Card](https://github.com/bthos/ha-octopus-energy-es-card) plugin.
 
 ## 📦 Installation
 
@@ -244,6 +247,10 @@ The integration includes robust error handling:
 - Supports Home Assistant 2023.1.0 and later
 - Automatic tariff configuration via Octopus Energy GraphQL API
 - Options flow for modifying configuration after initial setup
+
+### 📊 Related Components
+
+- **[Octopus Energy España Consumption Card](https://github.com/bthos/ha-octopus-energy-es-card)**: Official Lovelace card plugin for visualizing consumption graphs and tariff comparisons
 
 ## 💬 Support
 
