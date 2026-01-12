@@ -30,6 +30,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package.json
 
+      - name: Create plugin www directory
+        run: |
+          mkdir -p plugin/www/community/octopus_energy_es
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
@@ -37,14 +41,6 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
-
-      - name: Create plugin www directory
-        run: |
-          mkdir -p plugin/www/community/octopus_energy_es
-
-      - name: Copy built files
-        run: |
-          cp frontend/dist/octopus-consumption-card.bundle.js plugin/www/community/octopus_energy_es/
 
       - name: Commit and push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

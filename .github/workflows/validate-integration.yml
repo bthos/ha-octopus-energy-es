@@ -19,8 +19,16 @@ jobs:
   validate-hacs:
     runs-on: "ubuntu-latest"
     steps:
+      - uses: "actions/checkout@v4"
+      - name: Prepare integration structure
+        run: |
+          # Copy integration files to root
+          cp -r integration/custom_components .
+          cp integration/hacs.json .
+          cp integration/info.md .
+          cp integration/README.md .
       - name: HACS validation
         uses: "hacs/action@main"
         with:
           category: "integration"
-          path: "integration"
+          ignore: "brands"
