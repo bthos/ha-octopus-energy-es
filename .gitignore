@@ -66,9 +66,3 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
-
-# Frontend build artifacts
-frontend/node_modules/
-frontend/dist/
-# Keep plugin/www/ directory for HACS plugin resources
-# plugin/www/

@@ -27,7 +27,7 @@ jobs:
       - name: Get version from manifest
         id: get_version
         run: |
-          VERSION=$(python3 -c "import json; f=open('integration/custom_components/octopus_energy_es/manifest.json'); data=json.load(f); print(data['version']); f.close()")
+          VERSION=$(python3 -c "import json; f=open('custom_components/octopus_energy_es/manifest.json'); data=json.load(f); print(data['version']); f.close()")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
