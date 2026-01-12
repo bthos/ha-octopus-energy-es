@@ -8,6 +8,7 @@ Home Assistant integration for Octopus Energy España providing electricity pric
 - Price sensors compatible with price-timeline-card
 - Consumption and billing tracking
 - PVPC Hourly Pricing integration for Spanish electricity market data
+- Tariff comparison services
 
 ## Installation
 
@@ -16,4 +17,3 @@ Install via HACS or manually by copying the `custom_components/octopus_energy_es
 ## Configuration
 
 Configure via Home Assistant UI: Settings → Devices & Services → Add Integration → Octopus Energy España
-

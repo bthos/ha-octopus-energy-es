@@ -15,6 +15,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
+# Frontend resource is now in separate plugin repository
+
 
 def _setup_logging(entry: ConfigEntry) -> None:
     """Set up logging level based on configuration."""
@@ -41,6 +43,9 @@ def _setup_logging(entry: ConfigEntry) -> None:
     for logger_name in logger_names:
         logger = logging.getLogger(logger_name)
         logger.setLevel(log_level)
+
+
+# Frontend card is now a separate plugin - no notification needed
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

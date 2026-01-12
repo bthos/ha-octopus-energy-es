@@ -3,11 +3,11 @@ name: Build Frontend
 on:
   push:
     paths:
-      - 'custom_components/octopus_energy_es/frontend/**'
+      - 'frontend/**'
       - '.github/workflows/build-frontend.yml'
   pull_request:
     paths:
-      - 'custom_components/octopus_energy_es/frontend/**'
+      - 'frontend/**'
       - '.github/workflows/build-frontend.yml'
   release:
     types: [published]
@@ -28,29 +28,29 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: custom_components/octopus_energy_es/frontend/package.json
+          cache-dependency-path: frontend/package.json
 
       - name: Install dependencies
-        working-directory: custom_components/octopus_energy_es/frontend
+        working-directory: frontend
         run: npm ci
 
       - name: Build frontend
-        working-directory: custom_components/octopus_energy_es/frontend
+        working-directory: frontend
         run: npm run build
 
-      - name: Create www directory
+      - name: Create plugin www directory
         run: |
-          mkdir -p www/community/octopus_energy_es
+          mkdir -p plugin/www/community/octopus_energy_es
 
       - name: Copy built files
         run: |
-          cp custom_components/octopus_energy_es/frontend/dist/octopus-consumption-card.bundle.js www/community/octopus_energy_es/
+          cp frontend/dist/octopus-consumption-card.bundle.js plugin/www/community/octopus_energy_es/
 
       - name: Commit and push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add www/
+          git add plugin/www/
           git diff --staged --quiet || git commit -m "Build frontend components [skip ci]"
           git push

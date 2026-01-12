@@ -1,0 +1,8 @@
+{
+  "name": "Octopus Energy España",
+  "homeassistant": "2023.1.0",
+  "country": "ES",
+  "render_readme": true,
+  "content_in_root": false,
+  "zip_release": true
+}

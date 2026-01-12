@@ -14,14 +14,14 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": "./src",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
     "types": ["node"]
   },
   "include": [
-    "*.ts"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

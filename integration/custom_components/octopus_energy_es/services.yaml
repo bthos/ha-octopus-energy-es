@@ -1,0 +1,91 @@
+compare_tariffs:
+  name: Compare Tariffs
+  description: Compare multiple electricity tariffs based on actual consumption patterns.
+  fields:
+    tariff_entry_ids:
+      name: Tariff Entry IDs
+      description: List of tariff entry IDs to compare.
+      required: true
+      selector:
+        text:
+          multiple: true
+    source_entry_id:
+      name: Source Entry ID
+      description: Source entry ID for consumption data (defaults to first tariff).
+      required: false
+      selector:
+        text:
+    period:
+      name: Period
+      description: Period type for comparison.
+      required: false
+      default: daily
+      selector:
+        select:
+          options:
+            - daily
+            - weekly
+            - monthly
+            - custom
+    start_date:
+      name: Start Date
+      description: Start date for custom period (YYYY-MM-DD format).
+      required: false
+      selector:
+        date:
+    end_date:
+      name: End Date
+      description: End date for custom period (YYYY-MM-DD format).
+      required: false
+      selector:
+        date:
+    power_kw:
+      name: Power (kW)
+      description: Power value in kW (optional, will be retrieved from coordinator if not provided).
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.1
+          unit_of_measurement: kW
+
+fetch_consumption:
+  name: Fetch Consumption
+  description: Fetch consumption data for a specific entry and date range.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Configuration entry ID for the Octopus Energy España integration.
+      required: true
+      selector:
+        text:
+    start_date:
+      name: Start Date
+      description: Start date for consumption data (YYYY-MM-DD format).
+      required: false
+      selector:
+        date:
+    end_date:
+      name: End Date
+      description: End date for consumption data (YYYY-MM-DD format).
+      required: false
+      selector:
+        date:
+    granularity:
+      name: Granularity
+      description: Data granularity level.
+      required: false
+      default: hourly
+      selector:
+        select:
+          options:
+            - hourly
+            - daily
+            - monthly
+    apply_tariffs:
+      name: Apply Tariffs
+      description: List of tariff entry IDs to calculate costs for (optional).
+      required: false
+      selector:
+        text:
+          multiple: true

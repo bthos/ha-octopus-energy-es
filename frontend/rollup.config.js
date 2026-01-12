@@ -5,7 +5,7 @@ import terser from '@rollup/plugin-terser';
 export default {
   input: 'dist/octopus-consumption-card.js',
   output: {
-    file: 'dist/octopus-consumption-card.bundle.js',
+    file: '../plugin/www/community/octopus_energy_es/octopus-consumption-card.bundle.js',
     format: 'iife',
     name: 'OctopusConsumptionCard',
     sourcemap: false  // Disable source maps for production builds
