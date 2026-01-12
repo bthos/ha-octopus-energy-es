@@ -223,6 +223,8 @@ async def test_unique_id_prevention(
         source=config_entries.SOURCE_USER,
         unique_id="test@example.com",
         entry_id="existing_entry_id",
+        discovery_keys=None,
+        options={},
     )
     
     # Add existing entry to hass
@@ -272,6 +274,8 @@ async def test_reauth_flow(
         source=config_entries.SOURCE_USER,
         unique_id="test@example.com",
         entry_id="test_entry_id",
+        discovery_keys=None,
+        options={},
     )
     
     # Mock _get_reauth_entry to return the entry
