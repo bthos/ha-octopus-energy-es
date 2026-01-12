@@ -2,7 +2,7 @@ name: Release
 
 on:
   workflow_run:
-    workflows: ["Validate"]
+    workflows: ["Validate", "Test"]
     types:
       - completed
     branches:
@@ -11,10 +11,54 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
+  check-workflows:
+    # Check that both Validate and Test workflows succeeded
+    runs-on: ubuntu-latest
+    outputs:
+      validate-success: ${{ steps.check.outputs.validate-success }}
+      test-success: ${{ steps.check.outputs.test-success }}
+      both-success: ${{ steps.check.outputs.both-success }}
+    steps:
+      - name: Check Validate and Test workflows status
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'validate.yml',
+              branch: '${{ github.event.workflow_run.head_branch }}',
+              per_page: 1
+            });
+            
+            const validateSuccess = runs.workflow_runs[0]?.conclusion === 'success';
+            
+            const { data: testRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'test.yml',
+              branch: '${{ github.event.workflow_run.head_branch }}',
+              per_page: 1
+            });
+            
+            const testSuccess = testRuns.workflow_runs[0]?.conclusion === 'success';
+            
+            core.setOutput('validate-success', validateSuccess);
+            core.setOutput('test-success', testSuccess);
+            core.setOutput('both-success', validateSuccess && testSuccess);
+            
+            console.log(`Validate workflow: ${validateSuccess ? 'success' : 'failed/not found'}`);
+            console.log(`Test workflow: ${testSuccess ? 'success' : 'failed/not found'}`);
+
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master') }}
+    # Only run release if current workflow succeeded AND both Validate and Test workflows succeeded
+    # This ensures both validation and tests must pass before release
+    needs: check-workflows
+    if: ${{ github.event.workflow_run.conclusion == 'success' && needs.check-workflows.outputs.both-success == 'true' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
