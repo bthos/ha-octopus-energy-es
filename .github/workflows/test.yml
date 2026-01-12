@@ -29,18 +29,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt', '**/manifest.json', '.github/workflows/test.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
       - name: Install Python dependencies
+        timeout-minutes: 10
         run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pytest-timeout pytest-mock
-          pip install pytest-homeassistant-custom-component
+          python -m pip install --upgrade pip --disable-pip-version-check
+          pip install --disable-pip-version-check pytest pytest-asyncio pytest-timeout pytest-mock pytest-homeassistant-custom-component
 
       - name: Install integration requirements
+        timeout-minutes: 5
         run: |
-          pip install aiohttp>=3.8.0
-          pip install beautifulsoup4>=4.11.0
-          pip install lxml>=4.9.0
-          pip install python-graphql-client>=0.4.3
+          pip install --disable-pip-version-check aiohttp>=3.8.0 beautifulsoup4>=4.11.0 lxml>=4.9.0 python-graphql-client>=0.4.3
 
       - name: Run tests
         env:
