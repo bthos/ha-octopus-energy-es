@@ -214,31 +214,28 @@ async def test_unique_id_prevention(
     flow.async_set_unique_id = mock_set_unique_id
     
     # Create existing entry
-    # Try with minor_version first (newer HA versions), fall back without it (older versions)
+    # Try different parameter combinations for compatibility with different HA versions
+    base_params = {
+        "version": 1,
+        "domain": DOMAIN,
+        "title": "Existing Entry",
+        "data": {"email": "test@example.com"},
+        "source": config_entries.SOURCE_USER,
+        "unique_id": "test@example.com",
+        "entry_id": "existing_entry_id",
+        "options": {},
+    }
+    
+    # Try with both discovery_keys and minor_version (newest HA versions)
     try:
-        existing_entry = ConfigEntry(
-            version=1,
-            minor_version=1,
-            domain=DOMAIN,
-            title="Existing Entry",
-            data={"email": "test@example.com"},
-            source=config_entries.SOURCE_USER,
-            unique_id="test@example.com",
-            entry_id="existing_entry_id",
-            options={},
-        )
+        existing_entry = ConfigEntry(**base_params, minor_version=1, discovery_keys=None)
     except TypeError:
-        # Older Home Assistant versions don't support minor_version
-        existing_entry = ConfigEntry(
-            version=1,
-            domain=DOMAIN,
-            title="Existing Entry",
-            data={"email": "test@example.com"},
-            source=config_entries.SOURCE_USER,
-            unique_id="test@example.com",
-            entry_id="existing_entry_id",
-            options={},
-        )
+        # Try with only minor_version (middle HA versions)
+        try:
+            existing_entry = ConfigEntry(**base_params, minor_version=1)
+        except TypeError:
+            # Try without both (older HA versions)
+            existing_entry = ConfigEntry(**base_params)
     
     # Add existing entry to hass
     hass.config_entries._entries = {existing_entry.entry_id: existing_entry}
@@ -278,31 +275,28 @@ async def test_reauth_flow(
             flow.context = {}
     
     # Create entry for reauth
-    # Try with minor_version first (newer HA versions), fall back without it (older versions)
+    # Try different parameter combinations for compatibility with different HA versions
+    base_params = {
+        "version": 1,
+        "domain": DOMAIN,
+        "title": "Test Entry",
+        "data": {"email": "test@example.com", "password": "oldpassword", "property_id": "12345"},
+        "source": config_entries.SOURCE_USER,
+        "unique_id": "test@example.com",
+        "entry_id": "test_entry_id",
+        "options": {},
+    }
+    
+    # Try with both discovery_keys and minor_version (newest HA versions)
     try:
-        entry = ConfigEntry(
-            version=1,
-            minor_version=1,
-            domain=DOMAIN,
-            title="Test Entry",
-            data={"email": "test@example.com", "password": "oldpassword", "property_id": "12345"},
-            source=config_entries.SOURCE_USER,
-            unique_id="test@example.com",
-            entry_id="test_entry_id",
-            options={},
-        )
+        entry = ConfigEntry(**base_params, minor_version=1, discovery_keys=None)
     except TypeError:
-        # Older Home Assistant versions don't support minor_version
-        entry = ConfigEntry(
-            version=1,
-            domain=DOMAIN,
-            title="Test Entry",
-            data={"email": "test@example.com", "password": "oldpassword", "property_id": "12345"},
-            source=config_entries.SOURCE_USER,
-            unique_id="test@example.com",
-            entry_id="test_entry_id",
-            options={},
-        )
+        # Try with only minor_version (middle HA versions)
+        try:
+            entry = ConfigEntry(**base_params, minor_version=1)
+        except TypeError:
+            # Try without both (older HA versions)
+            entry = ConfigEntry(**base_params)
     
     # Mock _get_reauth_entry to return the entry
     flow._get_reauth_entry = lambda: entry
