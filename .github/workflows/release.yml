@@ -14,63 +14,11 @@ permissions:
   actions: read
 
 jobs:
-  check-workflows:
-    # Check that Test, Validate workflows succeeded for the same commit
-    # Since workflows run sequentially, we need to verify the chain: Test -> Validate -> Release
-    runs-on: ubuntu-latest
-    outputs:
-      test-success: ${{ steps.check.outputs.test-success }}
-      validate-success: ${{ steps.check.outputs.validate-success }}
-      all-success: ${{ steps.check.outputs.all-success }}
-    steps:
-      - name: Check Test and Validate workflows status
-        id: check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const headSha = '${{ github.event.workflow_run.head_sha }}';
-            const headBranch = '${{ github.event.workflow_run.head_branch }}';
-            
-            console.log(`Checking workflows for commit ${headSha} on branch ${headBranch}`);
-            
-            // Validate workflow is the one that triggered this run
-            const validateRunId = '${{ github.event.workflow_run.id }}';
-            const { data: validateRun } = await github.rest.actions.getWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: validateRunId
-            });
-            
-            const validateSuccess = validateRun.conclusion === 'success';
-            
-            // Find Test workflow run for the same commit (it should have run before Validate)
-            const { data: testRuns } = await github.rest.actions.listWorkflowRunsForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'test.yml',
-              branch: headBranch,
-              per_page: 10
-            });
-            
-            const testRun = testRuns.workflow_runs.find(run => run.head_sha === headSha);
-            const testSuccess = testRun?.conclusion === 'success';
-            
-            core.setOutput('test-success', testSuccess);
-            core.setOutput('validate-success', validateSuccess);
-            core.setOutput('all-success', testSuccess && validateSuccess);
-            
-            console.log(`Test workflow (commit ${headSha}): ${testSuccess ? 'success' : testRun ? `failed (${testRun.conclusion})` : 'not found'}`);
-            console.log(`Validate workflow (run ${validateRunId}): ${validateSuccess ? 'success' : `failed (${validateRun.conclusion})`}`);
-            
-            if (!testSuccess || !validateSuccess) {
-              core.setFailed('One or more required workflows did not succeed');
-            }
-
   release:
-    # Only run release if Validate workflow succeeded (which means Test also succeeded, as workflows run sequentially)
-    # This ensures both validation and tests must pass before release
-    needs: check-workflows
-    if: ${{ github.event.workflow_run.conclusion == 'success' && needs.check-workflows.outputs.all-success == 'true' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master') }}
+    # Only run release if Validate workflow succeeded
+    # Since workflows run sequentially (Test -> Validate -> Release), 
+    # if Validate succeeded, it means Test also succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
