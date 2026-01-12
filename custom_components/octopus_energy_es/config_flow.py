@@ -805,13 +805,13 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             tariff_name = user_input.get(CONF_NAME, "").strip()
             if tariff_name:
                 self._data[CONF_NAME] = tariff_name
-            return self._create_entry()
+            return await self._create_entry()
 
         # Skip if value came from API (auto-configured) - tariff name comes from product.display_name
         tariff_name_default = self._data.get(CONF_NAME, "").strip()
         if self._auto_configured and tariff_name_default:
             # Name came from API, skip form and create entry
-            return self._create_entry()
+            return await self._create_entry()
         
         # If not set, generate default name based on pricing model
         if not tariff_name_default:
@@ -841,7 +841,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    def _create_entry(self) -> FlowResult:
+    async def _create_entry(self) -> FlowResult:
         """Create the config entry."""
         # Use tariff name from config, or generate default if not set
         tariff_name = self._data.get(CONF_NAME, "").strip()
@@ -861,7 +861,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         # If reauth flow, update existing entry instead of creating new one
         if self._reauth_entry:
-            self.hass.config_entries.async_update_entry(
+            await self.hass.config_entries.async_update_entry(
                 self._reauth_entry,
                 data={**self._reauth_entry.data, **entry_data},
             )
@@ -965,7 +965,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if CONF_PROPERTY_ID in self._data:
                         updated_data[CONF_PROPERTY_ID] = self._data[CONF_PROPERTY_ID]
                     
-                    self.hass.config_entries.async_update_entry(
+                    await self.hass.config_entries.async_update_entry(
                         self._reauth_entry,
                         data=updated_data,
                     )

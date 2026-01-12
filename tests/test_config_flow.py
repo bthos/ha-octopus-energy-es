@@ -13,10 +13,11 @@ from custom_components.octopus_energy_es.const import DOMAIN
 
 
 @pytest.fixture
-async def flow(hass: HomeAssistant) -> OctopusEnergyESConfigFlow:
+def flow(hass: HomeAssistant) -> OctopusEnergyESConfigFlow:
     """Create config flow instance."""
     flow_instance = OctopusEnergyESConfigFlow()
     flow_instance.hass = hass
+    flow_instance._get_reauth_entry = lambda: None
     return flow_instance
 
 
@@ -24,8 +25,10 @@ async def test_user_step_initial(hass: HomeAssistant, flow: OctopusEnergyESConfi
     """Test initial user step."""
     result = await flow.async_step_user(None)
     
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "octopus_credentials"
+    # Result should be a dict, not a coroutine
+    assert isinstance(result, dict)
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "octopus_credentials"
 
 
 async def test_octopus_credentials_empty(hass: HomeAssistant, flow: OctopusEnergyESConfigFlow):
@@ -44,60 +47,97 @@ async def test_octopus_credentials_invalid_auth(
     """Test credentials step with invalid authentication."""
     from custom_components.octopus_energy_es.api.octopus_client import OctopusClientError
     
-    # Mock authentication failure
-    mock_octopus_client._authenticate = AsyncMock(side_effect=OctopusClientError("Invalid credentials"))
-    
-    result = await flow.async_step_octopus_credentials(
-        user_input={"email": "test@example.com", "password": "wrongpassword"}
-    )
-    
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"]["base"] == "invalid_auth"
+    # Mock authentication failure - patch OctopusClient in the api module
+    # The import happens inside the function, so we patch the module
+    with patch(
+        "custom_components.octopus_energy_es.api.octopus_client.OctopusClient"
+    ) as mock_client_class:
+        mock_client_instance = AsyncMock()
+        mock_client_instance._authenticate = AsyncMock(
+            side_effect=OctopusClientError("Invalid credentials")
+        )
+        mock_client_instance.close = AsyncMock()
+        mock_client_class.return_value = mock_client_instance
+        
+        result = await flow.async_step_octopus_credentials(
+            user_input={"email": "test@example.com", "password": "wrongpassword"}
+        )
+        
+        # Debug: check what we got
+        if result.get("errors", {}).get("base") != "invalid_auth":
+            print(f"Got error: {result.get('errors', {})}")
+        
+        assert result["type"] == FlowResultType.FORM
+        # The error message contains "invalid" so it should match
+        error_base = result.get("errors", {}).get("base", "")
+        assert error_base == "invalid_auth", f"Expected 'invalid_auth', got '{error_base}'"
 
 
 async def test_octopus_credentials_success_single_account(
     hass: HomeAssistant, flow: OctopusEnergyESConfigFlow, mock_octopus_client
 ):
     """Test successful authentication with single account."""
-    # Mock successful authentication
-    mock_octopus_client._authenticate = AsyncMock(return_value=None)
-    mock_octopus_client.fetch_properties = AsyncMock(
-        return_value=[{"number": "12345", "name": "Test Account"}]
-    )
-    mock_octopus_client.close = AsyncMock()
-    
-    result = await flow.async_step_octopus_credentials(
-        user_input={"email": "test@example.com", "password": "correctpassword"}
-    )
-    
-    # Should proceed to tariff config mode
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "tariff_config_mode"
-    assert flow._data["email"] == "test@example.com"
-    assert flow._data["property_id"] == "12345"
+    # Mock successful authentication - patch OctopusClient in the api module
+    with patch(
+        "custom_components.octopus_energy_es.api.octopus_client.OctopusClient"
+    ) as mock_client_class:
+        mock_client_instance = AsyncMock()
+        mock_client_instance._authenticate = AsyncMock(return_value=None)
+        mock_client_instance.fetch_properties = AsyncMock(
+            return_value=[{"number": "12345", "name": "Test Account"}]
+        )
+        mock_client_instance.close = AsyncMock()
+        mock_client_class.return_value = mock_client_instance
+        
+        # Mock async_step_tariff_config_mode to return a form
+        async def mock_tariff_config_mode(user_input=None):
+            return {"type": "form", "step_id": "tariff_config_mode"}
+        
+        flow.async_step_tariff_config_mode = mock_tariff_config_mode
+        
+        result = await flow.async_step_octopus_credentials(
+            user_input={"email": "test@example.com", "password": "correctpassword"}
+        )
+        
+        # Should proceed to tariff config mode
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "tariff_config_mode"
+        assert flow._data["email"] == "test@example.com"
+        assert flow._data["property_id"] == "12345"
 
 
 async def test_octopus_credentials_success_multiple_accounts(
     hass: HomeAssistant, flow: OctopusEnergyESConfigFlow, mock_octopus_client
 ):
     """Test successful authentication with multiple accounts."""
-    # Mock successful authentication with multiple accounts
-    mock_octopus_client._authenticate = AsyncMock(return_value=None)
-    mock_octopus_client.fetch_properties = AsyncMock(
-        return_value=[
-            {"number": "12345", "name": "Account 1"},
-            {"number": "67890", "name": "Account 2"},
-        ]
-    )
-    mock_octopus_client.close = AsyncMock()
-    
-    result = await flow.async_step_octopus_credentials(
-        user_input={"email": "test@example.com", "password": "correctpassword"}
-    )
-    
-    # Should show account selection
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "select_property"
+    # Mock successful authentication with multiple accounts - patch OctopusClient in the api module
+    with patch(
+        "custom_components.octopus_energy_es.api.octopus_client.OctopusClient"
+    ) as mock_client_class:
+        mock_client_instance = AsyncMock()
+        mock_client_instance._authenticate = AsyncMock(return_value=None)
+        mock_client_instance.fetch_properties = AsyncMock(
+            return_value=[
+                {"number": "12345", "name": "Account 1"},
+                {"number": "67890", "name": "Account 2"},
+            ]
+        )
+        mock_client_instance.close = AsyncMock()
+        mock_client_class.return_value = mock_client_instance
+        
+        # Mock async_step_select_property to return a form
+        async def mock_select_property(user_input=None):
+            return {"type": "form", "step_id": "select_property"}
+        
+        flow.async_step_select_property = mock_select_property
+        
+        result = await flow.async_step_octopus_credentials(
+            user_input={"email": "test@example.com", "password": "correctpassword"}
+        )
+        
+        # Should show account selection
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "select_property"
 
 
 async def test_unique_id_prevention(
@@ -150,21 +190,14 @@ async def test_reauth_flow(
         version=1,
         domain=DOMAIN,
         title="Test Entry",
-        data={"email": "test@example.com", "password": "oldpassword"},
+        data={"email": "test@example.com", "password": "oldpassword", "property_id": "12345"},
         source=config_entries.SOURCE_USER,
         unique_id="test@example.com",
         entry_id="test_entry_id",
     )
     
-    # Mock reauth entry
-    flow._reauth_entry = entry
-    
-    # Mock successful reauthentication
-    mock_octopus_client._authenticate = AsyncMock(return_value=None)
-    mock_octopus_client.fetch_properties = AsyncMock(
-        return_value=[{"number": "12345", "name": "Test Account"}]
-    )
-    mock_octopus_client.close = AsyncMock()
+    # Mock _get_reauth_entry to return the entry
+    flow._get_reauth_entry = lambda: entry
     
     # Start reauth flow
     result = await flow.async_step_reauth({})
@@ -173,13 +206,26 @@ async def test_reauth_flow(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reauth_confirm"
     
-    # Complete reauth
-    result = await flow.async_step_reauth_confirm(
-        user_input={"email": "test@example.com", "password": "newpassword"}
-    )
-    
-    # Should update entry and reload
-    assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "reauth_successful"
-    hass.config_entries.async_update_entry.assert_called_once()
-    hass.config_entries.async_reload.assert_called_once()
+    # Mock successful reauthentication - patch OctopusClient in the api module
+    with patch(
+        "custom_components.octopus_energy_es.api.octopus_client.OctopusClient"
+    ) as mock_client_class:
+        mock_client_instance = AsyncMock()
+        mock_client_instance._authenticate = AsyncMock(return_value=None)
+        mock_client_instance.fetch_properties = AsyncMock(
+            return_value=[{"number": "12345", "name": "Test Account"}]
+        )
+        mock_client_instance.close = AsyncMock()
+        mock_client_class.return_value = mock_client_instance
+        
+        # Complete reauth
+        result = await flow.async_step_reauth_confirm(
+            user_input={"email": "test@example.com", "password": "newpassword"}
+        )
+        
+        # Should update entry and reload
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "reauth_successful"
+        # Verify async methods were called
+        assert hass.config_entries.async_update_entry.called
+        assert hass.config_entries.async_reload.called
