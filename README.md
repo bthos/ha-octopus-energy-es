@@ -1,6 +1,7 @@
 # 🐙 Octopus Energy España - Home Assistant Integration
 
 [![HACS Validation](https://img.shields.io/github/actions/workflow/status/bthos/ha-octopus-energy-es/validate.yml?branch=main&label=HACS&logo=github)](https://github.com/bthos/ha-octopus-energy-es/actions/workflows/validate.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/bthos/ha-octopus-energy-es/test.yml?branch=main&label=Tests&logo=github)](https://github.com/bthos/ha-octopus-energy-es/actions/workflows/test.yml)
 
 Home Assistant custom component for Octopus Energy España, providing electricity price sensors, consumption tracking, and billing data integration.
 

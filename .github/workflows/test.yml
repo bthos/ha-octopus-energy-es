@@ -1,0 +1,50 @@
+name: Test
+
+on:
+  push:
+    paths:
+      - "custom_components/**"
+      - "tests/**"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "custom_components/**"
+      - "tests/**"
+      - ".github/workflows/test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-timeout pytest-mock
+          pip install pytest-homeassistant-custom-component
+
+      - name: Install integration requirements
+        run: |
+          pip install aiohttp>=3.8.0
+          pip install beautifulsoup4>=4.11.0
+          pip install lxml>=4.9.0
+          pip install python-graphql-client>=0.4.3
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest tests/ -v --tb=short --strict-markers

@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from zoneinfo import ZoneInfo
 
 from .api.octopus_client import OctopusClient, OctopusClientError
@@ -28,6 +29,22 @@ from .tariff.calculator import TariffCalculator
 from .tariff.types import create_tariff_config
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_auth_error(error_msg: str) -> bool:
+    """Check if error message indicates authentication failure."""
+    error_lower = error_msg.lower()
+    return any(phrase in error_lower for phrase in [
+        "401", 
+        "invalid", 
+        "credentials", 
+        "incorrect",
+        "wrong",
+        "please make sure",
+        "please check",
+        "kt-ct-1138",
+        "unauthorized"
+    ])
 
 
 class OctopusEnergyESCoordinator(DataUpdateCoordinator):
@@ -186,7 +203,16 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             except OctopusClientError as err:
                 error_msg = str(err).lower()
                 self._consumption_data_hourly = []  # Reset on error
-                if "not available" in error_msg or "not be publicly" in error_msg:
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" in error_msg.lower() or "not be publicly" in error_msg.lower():
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
                         "Consumption data will not be available. "
@@ -242,7 +268,16 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
             except OctopusClientError as err:
                 error_msg = str(err).lower()
                 self._consumption_data_daily = []  # Reset on error
-                if "not available" not in error_msg and "not be publicly" not in error_msg:
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" not in error_msg.lower() and "not be publicly" not in error_msg.lower():
                     _LOGGER.warning(
                         "Error updating daily consumption data: %s. "
                         "Weekly/Monthly/Yearly consumption sensors will show as Unknown.",
@@ -287,9 +322,18 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 else:
                     _LOGGER.debug("No monthly consumption data returned from API")
             except OctopusClientError as err:
-                error_msg = str(err).lower()
+                error_msg = str(err)
                 self._consumption_data_monthly = []  # Reset on error
-                if "not available" not in error_msg and "not be publicly" not in error_msg:
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" not in error_msg.lower() and "not be publicly" not in error_msg.lower():
                     _LOGGER.warning(
                         "Error updating monthly consumption data: %s. "
                         "Yearly consumption sensor will show as Unknown.",
@@ -316,8 +360,17 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 self._billing_data = await self._octopus_client.fetch_billing()
                 self._last_billing_update = now.date()
             except OctopusClientError as err:
-                error_msg = str(err).lower()
-                if "not available" in error_msg or "not be publicly" in error_msg:
+                error_msg = str(err)
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" in error_msg.lower() or "not be publicly" in error_msg.lower():
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
                         "Billing data will not be available. "
@@ -338,8 +391,17 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 self._credits_data = await self._octopus_client.fetch_account_credits()
                 self._last_credits_update = now.date()
             except OctopusClientError as err:
-                error_msg = str(err).lower()
-                if "not available" in error_msg or "not be publicly" in error_msg:
+                error_msg = str(err)
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" in error_msg.lower() or "not be publicly" in error_msg.lower():
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
                         "Credits data will not be available. "
@@ -373,8 +435,17 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                     self._account_data = account_info
                     self._last_account_update = now.date()
             except OctopusClientError as err:
-                error_msg = str(err).lower()
-                if "not available" in error_msg or "not be publicly" in error_msg:
+                error_msg = str(err)
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
+                if "not available" in error_msg.lower() or "not be publicly" in error_msg.lower():
                     _LOGGER.info(
                         "Octopus Energy España API is not available. "
                         "Account data will not be available. "
@@ -402,6 +473,16 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 else:
                     _LOGGER.debug("Tariff info not available from API")
             except OctopusClientError as err:
+                error_msg = str(err)
+                
+                # Check for authentication errors
+                if _is_auth_error(error_msg):
+                    _LOGGER.error(
+                        "Authentication failed for Octopus Energy España. "
+                        "Please reauthenticate in integration settings."
+                    )
+                    raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+                
                 _LOGGER.debug("Error updating tariff info: %s", err)
                 # Tariff info is optional, don't fail
 

@@ -6,6 +6,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .const import CONF_DEBUG, DOMAIN
 from .coordinator import OctopusEnergyESCoordinator
@@ -59,12 +60,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     coordinator = OctopusEnergyESCoordinator(hass, entry)
     
-    # Try to refresh data, but don't fail if it doesn't work initially
+    # Try to refresh data, but handle errors appropriately
     try:
         await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryAuthFailed:
+        # Authentication failed - trigger reauth flow
+        raise
     except Exception as err:
-        # Log error but continue setup - data will be fetched on next update
-        _LOGGER.warning("Initial data refresh failed, will retry: %s", err)
+        # For other errors, check if it's a temporary issue
+        error_msg = str(err).lower()
+        if any(phrase in error_msg for phrase in [
+            "cannot_connect",
+            "connection",
+            "network",
+            "timeout",
+            "not available",
+            "not be publicly",
+            "domain name not found",
+            "cannot connect to host",
+            "name or service not known"
+        ]):
+            # Temporary connection issue - raise ConfigEntryNotReady
+            raise ConfigEntryNotReady(f"Connection error: {err}") from err
+        else:
+            # Log error but continue setup - data will be fetched on next update
+            _LOGGER.warning("Initial data refresh failed, will retry: %s", err)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

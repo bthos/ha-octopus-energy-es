@@ -10,6 +10,8 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
+from collections.abc import Mapping
 
 from .const import (
     CONF_DEBUG,
@@ -63,6 +65,7 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._time_structure: str | None = None
         self._properties: list[dict[str, Any]] = []
         self._auto_configured: bool = False
+        self._reauth_entry: ConfigEntry | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -152,6 +155,12 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._data[CONF_EMAIL] = email
                     self._data[CONF_PASSWORD] = password
                     self._properties = properties
+                    
+                    # Set unique ID based on email to prevent duplicate entries
+                    # Only check for duplicates if not in reauth flow
+                    if not self._reauth_entry:
+                        await self.async_set_unique_id(email.lower().strip())
+                        self._abort_if_unique_id_configured()
                     
                     # If only one account, auto-select it
                     if len(properties) == 1:
@@ -850,10 +859,177 @@ class OctopusEnergyESConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Remove temporary flags before saving (keep _tariff_info)
         entry_data = {k: v for k, v in self._data.items() if not k.startswith("_") or k == "_tariff_info"}
         
+        # If reauth flow, update existing entry instead of creating new one
+        if self._reauth_entry:
+            self.hass.config_entries.async_update_entry(
+                self._reauth_entry,
+                data={**self._reauth_entry.data, **entry_data},
+            )
+            await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+            return self.async_abort(reason="reauth_successful")
+        
         return self.async_create_entry(
             title=tariff_name,
             data=entry_data,
         )
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> FlowResult:
+        """Handle reauthentication."""
+        self._reauth_entry = self._get_reauth_entry()
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Confirm reauthentication."""
+        errors: dict[str, str] = {}
+        
+        if user_input is None:
+            # Pre-fill email from existing entry
+            email = self._reauth_entry.data.get(CONF_EMAIL, "") if self._reauth_entry else ""
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_EMAIL, default=email): str,
+                        vol.Required(CONF_PASSWORD): str,
+                    }
+                ),
+                errors=errors,
+                description_placeholders={
+                    "email": email,
+                },
+            )
+        
+        # Validate new credentials
+        try:
+            from .api.octopus_client import OctopusClient, OctopusClientError
+            
+            email = user_input.get(CONF_EMAIL, "").strip()
+            password = user_input.get(CONF_PASSWORD, "")
+            
+            if not email or not password:
+                errors["base"] = "email_password_required"
+                return self.async_show_form(
+                    step_id="reauth_confirm",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_EMAIL, default=email): str,
+                            vol.Required(CONF_PASSWORD): str,
+                        }
+                    ),
+                    errors=errors,
+                )
+            
+            # Test authentication
+            test_client = OctopusClient(email, password, "dummy")
+            try:
+                await test_client._authenticate()
+                # Try to fetch properties to verify access
+                properties = await test_client.fetch_properties()
+                await test_client.close()
+                
+                if not properties:
+                    errors["base"] = "no_accounts_found"
+                    return self.async_show_form(
+                        step_id="reauth_confirm",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required(CONF_EMAIL, default=email): str,
+                                vol.Required(CONF_PASSWORD): str,
+                            }
+                        ),
+                        errors=errors,
+                    )
+                
+                # Update credentials in entry data
+                self._data[CONF_EMAIL] = email
+                self._data[CONF_PASSWORD] = password
+                
+                # If property_id changed, update it
+                if len(properties) == 1:
+                    prop = properties[0]
+                    self._data[CONF_PROPERTY_ID] = prop.get("number") or prop.get("id") or str(prop)
+                elif self._reauth_entry:
+                    # Keep existing property_id if multiple accounts
+                    self._data[CONF_PROPERTY_ID] = self._reauth_entry.data.get(CONF_PROPERTY_ID)
+                
+                # For reauth, update entry directly without going through tariff config
+                if self._reauth_entry:
+                    # Update entry data with new credentials
+                    updated_data = {**self._reauth_entry.data}
+                    updated_data[CONF_EMAIL] = email
+                    updated_data[CONF_PASSWORD] = password
+                    if CONF_PROPERTY_ID in self._data:
+                        updated_data[CONF_PROPERTY_ID] = self._data[CONF_PROPERTY_ID]
+                    
+                    self.hass.config_entries.async_update_entry(
+                        self._reauth_entry,
+                        data=updated_data,
+                    )
+                    await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                    return self.async_abort(reason="reauth_successful")
+                
+                # Continue with tariff config mode for new entry
+                self._properties = properties
+                return await self.async_step_tariff_config_mode()
+                
+            except OctopusClientError as err:
+                error_msg = str(err).lower()
+                await test_client.close()
+                
+                if any(phrase in error_msg for phrase in [
+                    "401", 
+                    "invalid", 
+                    "credentials", 
+                    "incorrect",
+                    "wrong",
+                    "please make sure",
+                    "please check",
+                    "kt-ct-1138"
+                ]):
+                    errors["base"] = "invalid_auth"
+                elif any(phrase in error_msg for phrase in [
+                    "cannot_connect", 
+                    "connection", 
+                    "network", 
+                    "timeout",
+                    "not available", 
+                    "not be publicly", 
+                    "domain name not found",
+                    "cannot connect to host",
+                    "name or service not known"
+                ]):
+                    errors["base"] = "cannot_connect"
+                else:
+                    errors["base"] = "unknown"
+                
+                return self.async_show_form(
+                    step_id="reauth_confirm",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_EMAIL, default=email): str,
+                            vol.Required(CONF_PASSWORD): str,
+                        }
+                    ),
+                    errors=errors,
+                )
+                
+        except Exception as err:
+            _LOGGER.error("Unexpected error during reauthentication: %s", err, exc_info=True)
+            errors["base"] = "unknown"
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_EMAIL, default=user_input.get(CONF_EMAIL, "")): str,
+                        vol.Required(CONF_PASSWORD): str,
+                    }
+                ),
+                errors=errors,
+            )
 
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> config_entries.OptionsFlow:

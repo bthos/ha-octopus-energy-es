@@ -1,0 +1,107 @@
+# Quality Scale Tracking for Octopus Energy España Integration
+# This file tracks compliance with Home Assistant Quality Scale rules
+# Status values: done, todo, exempt
+# Add a comment for exempt rules to explain why
+
+# 🥉 BRONZE TIER RULES (Baseline Standard)
+rules:
+  # Configuration & Setup
+  config-flow:
+    status: done
+  test-before-setup:
+    status: done
+    comment: Uses coordinator.async_config_entry_first_refresh()
+  unique-config-entry:
+    status: todo
+  
+  # Code Quality
+  common-modules:
+    status: todo
+  dependency-transparency:
+    status: done
+  brands:
+    status: exempt
+    comment: Custom HACS integration, not in brands repository
+  
+  # Testing
+  config-flow-test-coverage:
+    status: todo
+  test-before-configure:
+    status: todo
+  
+  # Documentation
+  docs-installation-instructions:
+    status: todo
+  docs-screenshots:
+    status: todo
+  
+  # Entity Standards
+  entity-unique-id:
+    status: done
+  
+  # 🥈 SILVER TIER RULES (Reliability & Robustness)
+  action-exceptions:
+    status: todo
+  async-dependency:
+    status: done
+    comment: Uses aiohttp and async/await throughout
+  appropriate-polling:
+    status: done
+    comment: Dynamic polling intervals based on time of day
+  entity-event-setup:
+    status: exempt
+    comment: No event entities in this integration
+  integration-owner:
+    status: done
+    comment: Active maintainer @bthos
+  log-when-unavailable:
+    status: done
+  reauthentication-flow:
+    status: todo
+  
+  # Documentation
+  docs-high-level-description:
+    status: todo
+  docs-actions:
+    status: todo
+  docs-troubleshooting:
+    status: todo
+  
+  # 🥇 GOLD TIER RULES (Comprehensive User Experience)
+  discovery:
+    status: exempt
+    comment: Requires user credentials, cannot auto-discover
+  entity-category:
+    status: todo
+  entity-descriptions:
+    status: done
+  entity-translations:
+    status: todo
+  has-entity-name:
+    status: todo
+  entity-device-class:
+    status: done
+    comment: Sensors use appropriate device_class (monetary, energy, etc.)
+  parallel-updates:
+    status: exempt
+    comment: Uses DataUpdateCoordinator which handles this
+  reconfiguration-flow:
+    status: done
+    comment: Integration supports options flow
+  runtime-data:
+    status: done
+    comment: Uses coordinator stored in entry runtime context
+  test-coverage:
+    status: todo
+  
+  # Documentation
+  docs-describe-entities:
+    status: todo
+  docs-examples:
+    status: todo
+  
+  # 🏆 PLATINUM TIER RULES (Technical Excellence)
+  strict-typing:
+    status: todo
+  code-comments:
+    status: todo

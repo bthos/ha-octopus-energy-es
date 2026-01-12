@@ -111,6 +111,14 @@
           "name": "Tariff Name"
         }
       },
+      "reauth_confirm": {
+        "title": "Reauthenticate Octopus Energy España",
+        "description": "Your Octopus Energy España credentials have expired or are invalid. Please enter your current credentials to continue.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
       "integration_settings": {
         "title": "Integration Settings",
         "description": "Configure integration settings.\n\n{debug_info}",
@@ -128,7 +136,8 @@
       "unknown": "An unexpected error occurred. Please check the Home Assistant logs for more details and try again."
     },
     "abort": {
-      "already_configured": "Octopus Energy España is already configured"
+      "already_configured": "Octopus Energy España is already configured",
+      "reauth_successful": "Reauthentication successful"
     }
   }
 }
