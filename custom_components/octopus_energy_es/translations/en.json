@@ -139,5 +139,63 @@
       "already_configured": "Octopus Energy España is already configured",
       "reauth_successful": "Reauthentication successful"
     }
+  },
+  "entity": {
+    "sensor": {
+      "octopus_energy_es_average_price": {
+        "name": "Average Price (24h)"
+      },
+      "octopus_energy_es_current_price": {
+        "name": "Current Price"
+      },
+      "octopus_energy_es_min_price": {
+        "name": "Min Price"
+      },
+      "octopus_energy_es_max_price": {
+        "name": "Max Price"
+      },
+      "octopus_energy_es_cheapest_hour": {
+        "name": "Cheapest Hour"
+      },
+      "octopus_energy_es_daily_consumption": {
+        "name": "Daily Consumption"
+      },
+      "octopus_energy_es_weekly_consumption": {
+        "name": "Weekly Consumption"
+      },
+      "octopus_energy_es_monthly_consumption": {
+        "name": "Monthly Consumption"
+      },
+      "octopus_energy_es_yearly_consumption": {
+        "name": "Yearly Consumption"
+      },
+      "octopus_energy_es_daily_cost": {
+        "name": "Daily Cost"
+      },
+      "octopus_energy_es_last_invoice": {
+        "name": "Last Invoice"
+      },
+      "octopus_energy_es_next_invoice_estimated": {
+        "name": "Next Invoice (Estimated)"
+      },
+      "octopus_energy_es_billing_period": {
+        "name": "Billing Period"
+      },
+      "octopus_energy_es_credits": {
+        "name": "Credits"
+      },
+      "octopus_energy_es_credits_estimated": {
+        "name": "Credits (Estimated)"
+      },
+      "octopus_energy_es_solar_wallet": {
+        "name": "Solar Wallet"
+      },
+      "octopus_energy_es_account": {
+        "name": "Account"
+      },
+      "octopus_energy_es_tariff_info": {
+        "name": "Tariff"
+      }
+    }
   }
 }

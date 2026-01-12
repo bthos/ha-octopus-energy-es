@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from zoneinfo import ZoneInfo
@@ -314,6 +315,7 @@ BILLING_PERIOD_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_billing_period",
     name="Billing Period",
     icon="mdi:calendar-range",
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -323,6 +325,7 @@ CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:piggy-bank-outline",
     suggested_display_precision=2,
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -332,12 +335,14 @@ CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:piggy-bank-outline",
     suggested_display_precision=2,
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 ACCOUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_account",
     name="Account",
     icon="mdi:account",
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -356,12 +361,14 @@ SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL,
     icon="mdi:wallet-bifold-outline",
     suggested_display_precision=2,
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 TARIFF_INFO_SENSOR_DESCRIPTION = SensorEntityDescription(
     key="octopus_energy_es_tariff_info",
     name="Tariff",
     icon="mdi:book-open",
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 
@@ -422,6 +429,8 @@ async def async_setup_entry(
 
 class OctopusEnergyESSensor(CoordinatorEntity, SensorEntity):
     """Base sensor for Octopus Energy España."""
+    
+    _attr_has_entity_name = True
 
     def __init__(
         self,

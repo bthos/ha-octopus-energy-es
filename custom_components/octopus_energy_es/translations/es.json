@@ -128,7 +128,66 @@
       "unknown": "Ocurrió un error inesperado. Por favor, compruebe los registros de Home Assistant para más detalles e intente de nuevo."
     },
     "abort": {
-      "already_configured": "Octopus Energy España ya está configurado"
+      "already_configured": "Octopus Energy España ya está configurado",
+      "reauth_successful": "Reautenticación exitosa"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "octopus_energy_es_average_price": {
+        "name": "Precio Medio (24h)"
+      },
+      "octopus_energy_es_current_price": {
+        "name": "Precio Actual"
+      },
+      "octopus_energy_es_min_price": {
+        "name": "Precio Mínimo"
+      },
+      "octopus_energy_es_max_price": {
+        "name": "Precio Máximo"
+      },
+      "octopus_energy_es_cheapest_hour": {
+        "name": "Hora Más Barata"
+      },
+      "octopus_energy_es_daily_consumption": {
+        "name": "Consumo Diario"
+      },
+      "octopus_energy_es_weekly_consumption": {
+        "name": "Consumo Semanal"
+      },
+      "octopus_energy_es_monthly_consumption": {
+        "name": "Consumo Mensual"
+      },
+      "octopus_energy_es_yearly_consumption": {
+        "name": "Consumo Anual"
+      },
+      "octopus_energy_es_daily_cost": {
+        "name": "Coste Diario"
+      },
+      "octopus_energy_es_last_invoice": {
+        "name": "Última Factura"
+      },
+      "octopus_energy_es_next_invoice_estimated": {
+        "name": "Próxima Factura (Estimada)"
+      },
+      "octopus_energy_es_billing_period": {
+        "name": "Período de Facturación"
+      },
+      "octopus_energy_es_credits": {
+        "name": "Créditos"
+      },
+      "octopus_energy_es_credits_estimated": {
+        "name": "Créditos (Estimados)"
+      },
+      "octopus_energy_es_solar_wallet": {
+        "name": "Monedero Solar"
+      },
+      "octopus_energy_es_account": {
+        "name": "Cuenta"
+      },
+      "octopus_energy_es_tariff_info": {
+        "name": "Tarifa"
+      }
     }
   }
 }

@@ -128,7 +128,66 @@
       "unknown": "Адбылася нечаканая памылка. Калі ласка, праверце журналы Home Assistant для больш падрабязнай інфармацыі і паспрабуйце зноў."
     },
     "abort": {
-      "already_configured": "Octopus Energy España ужо наладжаны"
+      "already_configured": "Octopus Energy España ужо наладжаны",
+      "reauth_successful": "Перааўтэнтыфікацыя прайшла паспяхова"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "octopus_energy_es_average_price": {
+        "name": "Сярэдняя цана (24г)"
+      },
+      "octopus_energy_es_current_price": {
+        "name": "Бягучая цана"
+      },
+      "octopus_energy_es_min_price": {
+        "name": "Мінімальная цана"
+      },
+      "octopus_energy_es_max_price": {
+        "name": "Максімальная цана"
+      },
+      "octopus_energy_es_cheapest_hour": {
+        "name": "Самая танная гадзіна"
+      },
+      "octopus_energy_es_daily_consumption": {
+        "name": "Штодзённае спажыванне"
+      },
+      "octopus_energy_es_weekly_consumption": {
+        "name": "Тыднёвае спажыванне"
+      },
+      "octopus_energy_es_monthly_consumption": {
+        "name": "Месячнае спажыванне"
+      },
+      "octopus_energy_es_yearly_consumption": {
+        "name": "Гадавое спажыванне"
+      },
+      "octopus_energy_es_daily_cost": {
+        "name": "Штодзённы кошт"
+      },
+      "octopus_energy_es_last_invoice": {
+        "name": "Апошняя фактура"
+      },
+      "octopus_energy_es_next_invoice_estimated": {
+        "name": "Наступная фактура (Разліковая)"
+      },
+      "octopus_energy_es_billing_period": {
+        "name": "Перыяд выстаўлення рахунка"
+      },
+      "octopus_energy_es_credits": {
+        "name": "Крэдыты"
+      },
+      "octopus_energy_es_credits_estimated": {
+        "name": "Крэдыты (Разліковыя)"
+      },
+      "octopus_energy_es_solar_wallet": {
+        "name": "Сонечны гаманец"
+      },
+      "octopus_energy_es_account": {
+        "name": "Акаўнт"
+      },
+      "octopus_energy_es_tariff_info": {
+        "name": "Тарыф"
+      }
     }
   }
 }
