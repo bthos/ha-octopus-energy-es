@@ -351,6 +351,7 @@ NEXT_INVOICE_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:invoice-text-clock-outline",
     suggested_display_precision=2,
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
