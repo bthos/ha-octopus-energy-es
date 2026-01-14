@@ -274,8 +274,8 @@ class OctopusClient:
 
     async def fetch_consumption(
         self,
-        start_date: date | None = None,
-        end_date: date | None = None,
+        start_date: date,
+        end_date: date,
         granularity: str = "hourly",
         use_property_query: bool = True,
     ) -> list[dict[str, Any]]:
@@ -283,8 +283,8 @@ class OctopusClient:
         Fetch consumption data using GraphQL.
 
         Args:
-            start_date: Start date for consumption data
-            end_date: End date for consumption data
+            start_date: Start date for consumption data (required)
+            end_date: End date for consumption data (required)
             granularity: 'hourly', 'daily', or 'monthly'
             use_property_query: If True, use property-based query (more efficient, default).
                                If False, use account-based query (fallback).
@@ -296,12 +296,6 @@ class OctopusClient:
             - consumption: kWh value
             - unit: "kWh"
         """
-        # Set default date range if not provided
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
-        
         # Fetch consumption data directly
         return await self._fetch_consumption_chunk(
             start_date=start_date,

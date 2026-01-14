@@ -185,7 +185,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
         if should_update_consumption_hourly and self._octopus_client:
             try:
                 end_date = now.date()
-                start_date = end_date - timedelta(days=3)  # Only 3 days for hourly data
+                start_date = end_date - timedelta(days=7)  # Last 7 days for hourly data
                 consumption_hourly_result = await self._octopus_client.fetch_consumption(
                     start_date=start_date,
                     end_date=end_date,
@@ -195,7 +195,7 @@ class OctopusEnergyESCoordinator(DataUpdateCoordinator):
                 self._last_consumption_hourly_update = now.date()
                 if consumption_hourly_result:
                     _LOGGER.debug(
-                        "Fetched %d hourly consumption measurements (last 3 days)",
+                        "Fetched %d hourly consumption measurements (last 7 days)",
                         len(consumption_hourly_result)
                     )
                 else:
