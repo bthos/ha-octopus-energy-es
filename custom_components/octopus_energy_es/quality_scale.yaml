@@ -10,9 +10,10 @@ rules:
     status: done
   test-before-setup:
     status: done
-    comment: Uses coordinator.async_config_entry_first_refresh()
+    comment: Uses coordinator.async_config_entry_first_refresh() with ConfigEntryAuthFailed and ConfigEntryNotReady
   unique-config-entry:
-    status: todo
+    status: done
+    comment: Uses email as unique_id with async_set_unique_id()
   
   # Code Quality
   common-modules:
@@ -25,9 +26,11 @@ rules:
   
   # Testing
   config-flow-test-coverage:
-    status: todo
+    status: done
+    comment: Tests in tests/test_config_flow.py
   test-before-configure:
-    status: todo
+    status: done
+    comment: Validates credentials before config flow proceeds
   
   # Documentation
   docs-installation-instructions:
@@ -57,7 +60,8 @@ rules:
   log-when-unavailable:
     status: done
   reauthentication-flow:
-    status: todo
+    status: done
+    comment: async_step_reauth and async_step_reauth_confirm implemented
   
   # Documentation
   docs-high-level-description:
@@ -72,13 +76,15 @@ rules:
     status: exempt
     comment: Requires user credentials, cannot auto-discover
   entity-category:
-    status: todo
+    status: done
+    comment: Diagnostic entities properly categorized with EntityCategory.DIAGNOSTIC
   entity-descriptions:
     status: done
   entity-translations:
     status: todo
   has-entity-name:
-    status: todo
+    status: done
+    comment: Entities use _attr_has_entity_name = True
   entity-device-class:
     status: done
     comment: Sensors use appropriate device_class (monetary, energy, etc.)
@@ -92,7 +98,8 @@ rules:
     status: done
     comment: Uses coordinator stored in entry runtime context
   test-coverage:
-    status: todo
+    status: done
+    comment: Tests for config flow and coordinator in tests/ directory
   
   # Documentation
   docs-describe-entities:
