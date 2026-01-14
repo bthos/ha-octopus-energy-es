@@ -325,7 +325,6 @@ CREDITS_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL_INCREASING,
     icon="mdi:piggy-bank-outline",
     suggested_display_precision=2,
-    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 CREDITS_ESTIMATED_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -361,7 +360,6 @@ SOLAR_WALLET_SENSOR_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL,
     icon="mdi:wallet-bifold-outline",
     suggested_display_precision=2,
-    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 TARIFF_INFO_SENSOR_DESCRIPTION = SensorEntityDescription(
