@@ -1,6 +1,6 @@
 compare_tariffs:
   name: Compare Tariffs
-  description: Compare multiple electricity tariffs based on actual consumption patterns.
+  description: Compare multiple electricity tariffs based on actual consumption patterns. Returns comparison results when called with return_response.
   fields:
     tariff_entry_ids:
       name: Tariff Entry IDs
@@ -48,23 +48,10 @@ compare_tariffs:
           min: 0
           step: 0.1
           unit_of_measurement: kW
-  response:
-    type: object
-    required: true
-    properties:
-      success:
-        type: boolean
-        description: Whether the comparison was successful
-      result:
-        type: object
-        description: Comparison result data
-      error:
-        type: string
-        description: Error message if the comparison failed
 
 fetch_consumption:
   name: Fetch Consumption
-  description: Fetch consumption data for a specific entry and date range.
+  description: Fetch consumption data for a specific entry and date range. Returns consumption data and optional tariff costs when called with return_response.
   fields:
     entry_id:
       name: Entry ID
@@ -102,22 +89,3 @@ fetch_consumption:
       selector:
         text:
           multiple: true
-  response:
-    type: object
-    required: true
-    properties:
-      success:
-        type: boolean
-        description: Whether the fetch was successful
-      consumption_data:
-        type: array
-        description: Array of consumption data points
-      tariff_costs:
-        type: object
-        description: Tariff cost breakdown by period
-      error:
-        type: string
-        description: Error message if the fetch failed
-      warning:
-        type: string
-        description: Warning message if applicable
