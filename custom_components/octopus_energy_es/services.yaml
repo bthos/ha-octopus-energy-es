@@ -48,6 +48,19 @@ compare_tariffs:
           min: 0
           step: 0.1
           unit_of_measurement: kW
+  response:
+    type: object
+    required: true
+    properties:
+      success:
+        type: boolean
+        description: Whether the comparison was successful
+      result:
+        type: object
+        description: Comparison result data
+      error:
+        type: string
+        description: Error message if the comparison failed
 
 fetch_consumption:
   name: Fetch Consumption
@@ -89,3 +102,22 @@ fetch_consumption:
       selector:
         text:
           multiple: true
+  response:
+    type: object
+    required: true
+    properties:
+      success:
+        type: boolean
+        description: Whether the fetch was successful
+      consumption_data:
+        type: array
+        description: Array of consumption data points
+      tariff_costs:
+        type: object
+        description: Tariff cost breakdown by period
+      error:
+        type: string
+        description: Error message if the fetch failed
+      warning:
+        type: string
+        description: Warning message if applicable

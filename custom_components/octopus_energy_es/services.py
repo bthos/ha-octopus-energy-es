@@ -9,6 +9,7 @@ import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import SupportsResponse
 from zoneinfo import ZoneInfo
 
 from .const import DOMAIN, TIMEZONE_MADRID
@@ -197,6 +198,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         "compare_tariffs",
         compare_tariffs_service,
         schema=COMPARE_TARIFFS_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     
     hass.services.async_register(
@@ -204,6 +206,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         "fetch_consumption",
         fetch_consumption_service,
         schema=FETCH_CONSUMPTION_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     
     _LOGGER.info("Octopus Energy España services registered")
