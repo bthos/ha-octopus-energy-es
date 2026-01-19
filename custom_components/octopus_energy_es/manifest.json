@@ -16,5 +16,5 @@
     "lxml>=4.9.0",
     "python-graphql-client>=0.4.3"
   ],
-  "version": "0.4.51"
+  "version": "0.4.52"
 }
