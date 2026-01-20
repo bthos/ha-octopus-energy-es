@@ -10,8 +10,6 @@ on:
       - "custom_components/**"
       - "tests/**"
       - ".github/workflows/**"
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:

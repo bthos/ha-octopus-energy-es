@@ -51,7 +51,17 @@ compare_tariffs:
 
 fetch_consumption:
   name: Fetch Consumption
-  description: Fetch consumption data for a specific entry and date range. Returns consumption data and optional tariff costs when called with return_response.
+  description: |
+    Fetch consumption data for a specific entry and date range. Returns consumption data and optional tariff costs when called with return_response.
+    
+    Supports on-demand fetching: if the requested date range falls outside the cached data window, 
+    the service will automatically fetch the missing data from the API. Cached data ranges:
+    - hourly: last 7 days
+    - daily: last 30 days
+    - monthly: year-to-date
+    
+    The service will merge cached and on-demand data to provide complete results. If an API call fails,
+    the service falls back to returning available cached data.
   fields:
     entry_id:
       name: Entry ID
@@ -61,13 +71,13 @@ fetch_consumption:
         text:
     start_date:
       name: Start Date
-      description: Start date for consumption data (YYYY-MM-DD format).
+      description: Start date for consumption data (YYYY-MM-DD format). If not provided, uses cached data range start.
       required: false
       selector:
         date:
     end_date:
       name: End Date
-      description: End date for consumption data (YYYY-MM-DD format).
+      description: End date for consumption data (YYYY-MM-DD format). If not provided, uses cached data range end.
       required: false
       selector:
         date:
