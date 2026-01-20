@@ -41,6 +41,12 @@ FETCH_CONSUMPTION_SCHEMA = vol.Schema(
     }
 )
 
+GET_LAST_DATA_DATE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entry_id"): cv.string,
+    }
+)
+
 
 @callback
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -306,6 +312,84 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 "error": str(err),
             }
     
+    async def get_last_data_date_service(call: ServiceCall) -> dict[str, Any]:
+        """Service to get the last available date with consumption data.
+        
+        Determines the most recent date for which consumption data is available
+        in the cached data. This helps avoid requesting data for future dates
+        when Octopus Energy API has delays.
+        """
+        entry_id = call.data.get("entry_id")
+        
+        if DOMAIN not in hass.data:
+            return {
+                "success": False,
+                "error": "Octopus Energy España integration not initialized",
+            }
+        
+        coordinators = hass.data[DOMAIN]
+        coordinator: OctopusEnergyESCoordinator | None = coordinators.get(entry_id)
+        
+        if not coordinator:
+            return {
+                "success": False,
+                "error": f"Config entry {entry_id} not found",
+            }
+        
+        try:
+            timezone = ZoneInfo(TIMEZONE_MADRID)
+            last_date: date | None = None
+            
+            # Check all available consumption data sources (hourly, daily, monthly)
+            # to find the most recent date
+            consumption_sources = [
+                ("consumption_hourly", coordinator.data.get("consumption_hourly", [])),
+                ("consumption_daily", coordinator.data.get("consumption_daily", [])),
+                ("consumption_monthly", coordinator.data.get("consumption_monthly", [])),
+            ]
+            
+            for source_name, consumption_data in consumption_sources:
+                if not consumption_data:
+                    continue
+                
+                for item in consumption_data:
+                    start_time_str = item.get("start_time") or item.get("date")
+                    if not start_time_str:
+                        continue
+                    
+                    try:
+                        dt = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                        dt = dt.astimezone(timezone)
+                        item_date = dt.date()
+                        
+                        if last_date is None or item_date > last_date:
+                            last_date = item_date
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug(
+                            "Error parsing date from %s data: %s",
+                            source_name, err
+                        )
+                        continue
+            
+            if last_date is None:
+                return {
+                    "success": False,
+                    "error": "No data available",
+                }
+            
+            return {
+                "success": True,
+                "last_data_date": last_date.isoformat(),
+            }
+        except Exception as err:
+            _LOGGER.error("Error getting last data date: %s", err, exc_info=True)
+            return {
+                "success": False,
+                "error": str(err),
+            }
+    
     hass.services.async_register(
         DOMAIN,
         "compare_tariffs",
@@ -319,6 +403,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         "fetch_consumption",
         fetch_consumption_service,
         schema=FETCH_CONSUMPTION_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "get_last_data_date",
+        get_last_data_date_service,
+        schema=GET_LAST_DATA_DATE_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     

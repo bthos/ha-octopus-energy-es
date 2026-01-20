@@ -99,3 +99,20 @@ fetch_consumption:
       selector:
         text:
           multiple: true
+
+get_last_data_date:
+  name: Get Last Data Date
+  description: |
+    Get the last available date for which consumption data is available.
+    This service helps determine the most recent date with data to avoid requesting
+    data for future dates when Octopus Energy API has delays.
+    
+    The service checks all cached consumption data sources (hourly, daily, monthly)
+    and returns the most recent date found.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Configuration entry ID for the Octopus Energy España integration.
+      required: true
+      selector:
+        text:
