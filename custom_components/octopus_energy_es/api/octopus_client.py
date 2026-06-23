@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..const import (
     OCTOPUS_API_BASE_URL,
+    OCTOPUS_LOGIN_URL,
     TIMEZONE_MADRID,
 )
 
@@ -49,104 +50,113 @@ class OctopusClient:
 
     async def _authenticate(self, force: bool = False) -> str:
         """
-        Authenticate with Octopus Energy España GraphQL API and return auth token.
+        Authenticate with Octopus Energy España and return auth token.
 
-        Uses GraphQL mutation: obtainKrakenToken
-        
+        POSTs credentials to the España web-app login endpoint
+        (https://octopusenergy.es/api/auth/login) and reads the ``accessToken``
+        JWT from the response cookies.  That token is then used as the
+        ``Authorization`` header for all GraphQL requests to
+        https://api.oees-kraken.energy/v1/graphql/.
+
         Args:
-            force: If True, force re-authentication even if token exists
+            force: If True, force re-authentication even if token exists.
         """
         if self._auth_token and not force:
             return self._auth_token
-        
+
         # Clear existing token if forcing re-authentication
         if force:
             self._auth_token = None
 
-        mutation = """
-           mutation obtainKrakenToken($input: ObtainJSONWebTokenInput!) {
-              obtainKrakenToken(input: $input) {
-                token
-              }
-            }
-        """
-        variables = {"input": {"email": self._email, "password": self._password}}
-
-        # BP-AUTH-0450 ("fetch failed") is a transient Kraken backend error — retry with backoff.
-        _TRANSIENT_AUTH_CODES = {"BP-AUTH-0450"}
         _MAX_AUTH_RETRIES = 3
         _AUTH_RETRY_DELAY = 2  # seconds; doubled each attempt
 
         last_error: OctopusClientError | None = None
         for attempt in range(_MAX_AUTH_RETRIES):
             try:
-                client = GraphqlClient(endpoint=OCTOPUS_API_BASE_URL)
-                response = await client.execute_async(mutation, variables)
+                session = await self._get_session()
+                async with session.post(
+                    OCTOPUS_LOGIN_URL,
+                    json={"email": self._email, "password": self._password},
+                ) as resp:
+                    if resp.status == 401 or resp.status == 403:
+                        _LOGGER.error(
+                            "Authentication rejected by Octopus Energy España (HTTP %s). "
+                            "Please check your email and password.",
+                            resp.status,
+                        )
+                        raise OctopusClientError(
+                            "Invalid Octopus Energy credentials. Please check your email and password."
+                        )
 
-                if "errors" in response:
-                    errors = response["errors"]
-
-                    error_code = None
-                    error_message = None
-                    for error in errors:
-                        if isinstance(error, dict):
-                            extensions = error.get("extensions", {})
-                            error_code = extensions.get("errorCode")
-                            if "errorDescription" in extensions:
-                                error_message = extensions["errorDescription"]
-                                break
-                            validation_errors = extensions.get("validationErrors", [])
-                            if validation_errors:
-                                error_message = validation_errors[0].get("message")
-                                break
-                            if "message" in error:
-                                error_message = error["message"]
-                                break
-
-                    if not error_message:
-                        error_message = str(errors)
-
-                    # Transient server-side error — retry
-                    if error_code in _TRANSIENT_AUTH_CODES:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        _LOGGER.error(
+                            "Unexpected HTTP %s from login endpoint: %s", resp.status, body
+                        )
+                        # Treat as transient — retry
+                        last_error = OctopusClientError(
+                            f"Authentication failed: HTTP {resp.status}"
+                        )
                         delay = _AUTH_RETRY_DELAY * (2 ** attempt)
                         _LOGGER.warning(
-                            "Transient authentication error (%s: %s), retrying in %ds (attempt %d/%d)",
-                            error_code, error_message, delay, attempt + 1, _MAX_AUTH_RETRIES,
+                            "Transient login error (HTTP %s), retrying in %ds (attempt %d/%d)",
+                            resp.status, delay, attempt + 1, _MAX_AUTH_RETRIES,
                         )
-                        last_error = OctopusClientError(f"Authentication failed: {error_message}")
                         await asyncio.sleep(delay)
                         continue
 
-                    _LOGGER.error("GraphQL authentication error: %s", errors)
-                    error_msg_lower = error_message.lower()
-                    if any(phrase in error_msg_lower for phrase in [
-                        "invalid", "credentials", "incorrect", "wrong",
-                        "please make sure", "kt-ct-1138"
-                    ]):
-                        raise OctopusClientError("Invalid Octopus Energy credentials. Please check your email and password.")
-                    raise OctopusClientError(f"Authentication failed: {error_message}")
+                    # Read accessToken from response cookies
+                    token = resp.cookies.get("accessToken")
+                    if token is None:
+                        # Fallback: try to find the token in the JSON body
+                        try:
+                            body_json = await resp.json()
+                            token_value = (
+                                body_json.get("accessToken")
+                                or body_json.get("token")
+                            )
+                        except Exception:
+                            token_value = None
 
-                if "data" not in response or "obtainKrakenToken" not in response["data"]:
-                    _LOGGER.error("Unexpected authentication response: %s", response)
-                    raise OctopusClientError("No auth token received from API")
+                        if not token_value:
+                            _LOGGER.error(
+                                "No accessToken cookie or body field in login response. "
+                                "Response cookies: %s",
+                                list(resp.cookies.keys()),
+                            )
+                            raise OctopusClientError("No auth token received from API")
 
-                self._auth_token = response["data"]["obtainKrakenToken"]["token"]
+                        self._auth_token = str(token_value)
+                    else:
+                        self._auth_token = token.value
 
-                if not self._auth_token:
-                    _LOGGER.error("No auth token in response: %s", response)
-                    raise OctopusClientError("No auth token received from API")
+                    if not self._auth_token:
+                        raise OctopusClientError("No auth token received from API")
 
-                _LOGGER.debug("Successfully authenticated with Octopus Energy España API")
-                return self._auth_token
+                    _LOGGER.debug("Successfully authenticated with Octopus Energy España API")
+                    return self._auth_token
 
             except OctopusClientError:
                 raise
+            except aiohttp.ClientConnectorError as err:
+                error_msg = str(err)
+                _LOGGER.error(
+                    "Octopus Energy España login endpoint not reachable (%s). "
+                    "Consumption and billing data will not be available. "
+                    "Price data will still work using market data sources.",
+                    error_msg,
+                )
+                raise OctopusClientError(
+                    "Octopus Energy España API is not available. "
+                    "This integration can still provide price data using market sources, "
+                    "but consumption and billing data will not be available."
+                ) from err
             except Exception as err:
                 error_msg = str(err)
                 if "Domain name not found" in error_msg or "Name or service not known" in error_msg:
                     _LOGGER.error(
-                        "Octopus Energy España API endpoint not found. "
-                        "The API may not be publicly available. "
+                        "Octopus Energy España login endpoint not found. "
                         "Consumption and billing data will not be available. "
                         "Price data will still work using market data sources."
                     )
@@ -158,8 +168,8 @@ class OctopusClient:
                 _LOGGER.error("Network error authenticating: %s", err)
                 raise OctopusClientError(f"Error authenticating: {err}") from err
 
-        # All retries exhausted on transient error
-        _LOGGER.error("Authentication failed after %d retries (BP-AUTH-0450)", _MAX_AUTH_RETRIES)
+        # All retries exhausted
+        _LOGGER.error("Authentication failed after %d retries", _MAX_AUTH_RETRIES)
         raise last_error or OctopusClientError("Authentication failed: unknown error")
 
     async def _get_graphql_client(self) -> GraphqlClient:

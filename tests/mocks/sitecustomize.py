@@ -32,6 +32,10 @@ sys.modules['homeassistant.data_entry_flow'] = homeassistant_mock.data_entry_flo
 sys.modules['homeassistant.const'] = homeassistant_mock.const
 sys.modules['homeassistant.helpers'] = homeassistant_mock.helpers
 sys.modules['homeassistant.helpers.update_coordinator'] = homeassistant_mock.helpers.update_coordinator
+sys.modules['homeassistant.helpers.service'] = homeassistant_mock.helpers.service
+sys.modules['homeassistant.helpers.entity_platform'] = homeassistant_mock.helpers.entity_platform
+sys.modules['homeassistant.helpers.entity'] = homeassistant_mock.helpers.entity
+sys.modules['homeassistant.helpers.device_registry'] = homeassistant_mock.helpers.device_registry
 sys.modules['homeassistant.exceptions'] = homeassistant_mock.exceptions
 
 # Make constants available as attributes for direct import

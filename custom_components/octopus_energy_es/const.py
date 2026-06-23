@@ -60,9 +60,11 @@ UPDATE_INTERVAL_BILLING = timedelta(hours=24)
 # Spanish market publishes tomorrow's prices at 14:00 CET
 MARKET_PUBLISH_HOUR = 14
 
-# Octopus Energy España uses GraphQL API
-# Using the same endpoint as the dashboard for consistency
-OCTOPUS_API_BASE_URL = "https://octopusenergy.es/api/graphql/kraken"
+# Octopus Energy España uses a two-endpoint auth flow:
+# - Login via the España web app auth route (returns accessToken JWT in cookie)
+# - GraphQL queries via the Kraken API (uses accessToken as Authorization header)
+OCTOPUS_LOGIN_URL = "https://octopusenergy.es/api/auth/login"
+OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
 
 # Default timezone
 TIMEZONE_MADRID = "Europe/Madrid"
