@@ -66,6 +66,19 @@ MARKET_PUBLISH_HOUR = 14
 OCTOPUS_LOGIN_URL = "https://octopusenergy.es/api/auth/login"
 OCTOPUS_API_BASE_URL = "https://api.oees-kraken.energy/v1/graphql/"
 
+# aiohttp sends no User-Agent/Origin/Referer by default, which some WAF/bot-protection
+# layers reject outright (before credentials are even checked). Mimic a real browser
+# request to the login endpoint to avoid being misclassified as bot traffic.
+OCTOPUS_LOGIN_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://octopusenergy.es",
+    "Referer": "https://octopusenergy.es/login",
+}
+
 # Default timezone
 TIMEZONE_MADRID = "Europe/Madrid"
 

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..const import (
     OCTOPUS_API_BASE_URL,
+    OCTOPUS_LOGIN_HEADERS,
     OCTOPUS_LOGIN_URL,
     TIMEZONE_MADRID,
 )
@@ -78,12 +79,17 @@ class OctopusClient:
                 async with session.post(
                     OCTOPUS_LOGIN_URL,
                     json={"email": self._email, "password": self._password},
+                    headers=OCTOPUS_LOGIN_HEADERS,
                 ) as resp:
                     if resp.status == 401 or resp.status == 403:
+                        body = await resp.text()
                         _LOGGER.error(
                             "Authentication rejected by Octopus Energy España (HTTP %s). "
-                            "Please check your email and password.",
+                            "This may mean the credentials are wrong, or that the request was "
+                            "blocked before credentials were even checked (e.g. WAF/bot protection "
+                            "or a changed login flow). Response body: %s",
                             resp.status,
+                            body[:500],
                         )
                         raise OctopusClientError(
                             "Invalid Octopus Energy credentials. Please check your email and password."
