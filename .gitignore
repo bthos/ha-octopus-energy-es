@@ -68,6 +68,10 @@ logs/
 Thumbs.db
 .DS_Store
 
+# Untracked locally (talaka entry points, per-developer)
+/AGENTS.md
+/CLAUDE.md
+
 # >>> talaka (managed) >>>
 # Managed by talaka — a per-developer tool, NOT intended for team sync.
 # Re-run `talaka/shared/lifecycle/tools/init.sh` to refresh, or `talaka/shared/lifecycle/tools/teardown.sh`
@@ -75,7 +79,7 @@ Thumbs.db
 #
 # The kit commits nothing of its own: a teammate who does not use talaka
 # sees none of this, and a second kit user just re-runs init.sh to regenerate
-# it. Everything below is personal working state. (curating-knowledge's wiki/ lives at the
+# it. Everything below is personal working state. (knowledge-curating's wiki/ lives at the
 # project root, outside this dir, precisely so it CAN be committed.)
 #
 # --- Artefacts: all per-developer pipeline state (memory, features, PIPELINE.md, PROJECT.md, …) ---
@@ -88,14 +92,17 @@ Thumbs.db
 .claude/agents/veles.md
 .claude/agents/yaga.md
 .claude/agents/zlydni.md
-.claude/skills/adapting-patterns/
-.claude/skills/auditing-consistency/
-.claude/skills/creating-mockups/
-.claude/skills/curating-knowledge/
-.claude/skills/designing-cli/
-.claude/skills/designing-ux/
-.claude/skills/diagnosing-bugs/
-.claude/skills/eliciting-requirements/
-.claude/skills/mapping-codebase/
-.claude/skills/planning-architecture/
+.claude/skills/architecture-planning/
+.claude/skills/assumptions-challenging/
+.claude/skills/bugs-diagnosing/
+.claude/skills/cli-designing/
+.claude/skills/codebase-mapping/
+.claude/skills/consistency-auditing/
+.claude/skills/knowledge-curating/
+.claude/skills/mockups-creating/
+.claude/skills/patterns-adapting/
+.claude/skills/prompts-building/
+.claude/skills/requirements-eliciting/
+.claude/skills/tasks-researching/
+.claude/skills/ux-designing/
 # <<< talaka (managed) <<<
